@@ -100,9 +100,6 @@ ENV/
 # mypy
 .mypy_cache/
 
-
 # data file
 HW1/data/
-
-
 
