@@ -101,5 +101,8 @@ ENV/
 .mypy_cache/
 
 # data file
-HW1/data/
+*.wav
+*.ark
+*.zip
+
 
