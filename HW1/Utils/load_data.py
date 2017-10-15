@@ -1,46 +1,121 @@
-def load_batched_data(mfccPath, labelPath, batchSize, mode, level):
-    '''returns 3-element tuple: batched data (list), maxTimeLength (int), and
-       total number of samples (int)'''
-    return data_lists_to_batches([np.load(os.path.join(mfccPath, fn)) for fn in os.listdir(mfccPath)],
-                                 [np.load(os.path.join(labelPath, fn)) for fn in os.listdir(labelPath)],
-                                 batchSize, level) + \
-            (len(os.listdir(mfccPath)),)
+import numpy as np
+import os
+import pandas as pd
+import pickle
 
-def data_lists_to_batches(inputList, targetList, batchSize, level):
-    ''' padding the input list to a same dimension, integrate all data into batchInputs
-    '''
-    assert len(inputList) == len(targetList)
-    # dimensions of inputList:batch*39*time_length
+def ark_parser(ark_path, filename):
+    df = pd.read_csv(os.path.join(ark_path, filename), header=None, delimiter=' ')
+    name = ''
+    input = []
+    inputlist = []
+    namelist = []
 
-    nFeatures = inputList[0].shape[0]
-    maxLength = 0
-    for inp in inputList:
-	    # find the max time_length
-        maxLength = max(maxLength, inp.shape[1])
+    for _, i in df.iterrows():
+        curr_name = '_'.join(i.values[0].split('_')[:2])
+        if(name != curr_name):
+            
+            if(name != ''):
+                inputlist.append(np.array(input, dtype=np.float32))
+                namelist.append(name)
+                input = []
 
-    # randIxs is the shuffled index from range(0,len(inputList))
-    randIxs = np.random.permutation(len(inputList))
-    start, end = (0, batchSize)
-    dataBatches = []
+            name = curr_name
 
-    while end <= len(inputList):
-	    # batchSeqLengths store the time-length of each sample in a mini-batch
-        batchSeqLengths = np.zeros(batchSize)
+        input.append(i.values[1:])
 
-  	    # randIxs is the shuffled index of input list
-        for batchI, origI in enumerate(randIxs[start:end]):
-            batchSeqLengths[batchI] = inputList[origI].shape[-1]
+    if(name != ''):
+        inputlist.append(np.array(input, dtype=np.float32))
+        namelist.append(name)
+    print('done')
+    return inputlist, namelist
 
-        batchInputs = np.zeros((maxLength, batchSize, nFeatures))
-        batchTargetList = []
-        for batchI, origI in enumerate(randIxs[start:end]):
-	        # padSecs is the length of padding
-            padSecs = maxLength - inputList[origI].shape[1]
-	        # numpy.pad pad the inputList[origI] with zeos at the tail
-            batchInputs[:,batchI,:] = np.pad(inputList[origI].T, ((0,padSecs),(0,0)), 'constant', constant_values=0)
-	        # target label
-            batchTargetList.append(targetList[origI])
-        dataBatches.append((batchInputs, list_to_sparse_tensor(batchTargetList, level), batchSeqLengths))
-        start += batchSize
-        end += batchSize
-    return (dataBatches, maxLength)
+def lab_parser(lab_path):
+
+    df = pd.read_csv(os.path.join(lab_path, 'train.lab'), header=None, delimiter=',')
+    name = ''
+    labdict = {}
+    input = []
+    for _, i in df.iterrows():
+        curr_name = '_'.join(i.values[0].split('_')[:2])
+        if(name != curr_name):
+            if(name != ''):
+                labdict[name] = input
+                input = []
+            name = curr_name
+        input.append(i.values[1])
+    if(name != ''):
+        labdict[name] = input
+        
+    return labdict
+
+def convert_testing_data(mfccPath):
+    """convert testing data to pkl file"""
+    inputlist, inputnamelist = ark_parser(mfccPath, 'test.ark')
+
+    print("%d sample in testing set" % len(inputlist))
+    with open('../data/test_data.pkl', 'wb') as test_data:
+        pickle.dump(inputlist, test_data)
+
+
+def convert_data(mfccPath, labelPath):
+    """convert training data to pkl file"""
+    inputlist, inputnamelist = ark_parser(mfccPath, 'train.ark')
+    labeldict = lab_parser(labelPath)
+
+    label = []
+    assert len(inputnamelist) == len(labeldict.keys())
+
+    for name in inputnamelist:
+        label.append(labeldict[name])
+
+    with open('../data/train_data.pkl', 'wb') as train_data:
+        pickle.dump(inputlist, train_data)
+
+    with open('../data/train_label.pkl', 'wb') as train_label:
+        pickle.dump( label, train_label )
+
+def phone_map_reader(path_to_phone_map):
+    """48 phone to 39 phone"""
+    mapping = dict()
+    phn = []
+    group_phn = []
+    with open(path_to_phone_map) as f:
+       
+        for line in f:
+            m = line.strip().split('\t')
+            phn.append(m[0])
+            if m[1] not in group_phn:
+                group_phn.append(m[1])
+            mapping[m[0]] = m[1]
+
+    return phn, group_phn, mapping
+
+def phone_char_reader(path_to_phone_char_map):
+    """"map 48 phone to 26 character"""
+    mapping = dict()
+    with open(path_to_phone_char_map) as f:
+        for line in f:
+            m = line.strip().split('\t')
+            mapping[m[0]] = m[2]
+
+    return mapping 
+
+def phone_int_mapping(path_to_phone_char_map):
+    """"map 48 phone to 26 character"""
+    mapping = dict()
+    with open(path_to_phone_char_map) as f:
+        for line in f:
+            m = line.strip().split('\t')
+            mapping[m[0]] = int(m[1])
+
+    return mapping 
+
+def main():
+    mfcc_path = '../data/mfcc'
+    label_path = '../data/label'
+    #convert_data(mfcc_path, label_path)
+    convert_testing_data(mfcc_path)
+
+
+if __name__ == "__main__":
+    main()

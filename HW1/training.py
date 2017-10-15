@@ -11,13 +11,14 @@ from Utils import layers
 from tensorflow.contrib.rnn import BasicLSTMCell
 
 data_folder = './data'
+
 NUM_CLASSES = 48
 
 ### Parameters (overidden by argparse, default values listed here)
 num_epochs = 15
 train_batch_size = 32
-num_hidden = 500
-num_lstm_layers = 1
+num_hidden = 250
+num_lstm_layers = 2
 num_steps = 800
 use_dropout = True
 optimizer_name='Adam'
@@ -60,33 +61,8 @@ b = {
     'out': tf.Variable(tf.constant(0.1, shape=[num_classes]), name="out_bias"),
 }
 
-
-def weight_variable(shape):
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
-
-def bias_variable(shape):
-  initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
-
-def weight_variable(shape):
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
-
-def conv2d(x, W):
-  return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='VALID')
-
-def RNN_CNN(X):
+def RNN(X):
     
-
-    with tf.name_scope("conv_1"):
-        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
-        W_conv1 = weight_variable([3, 1, 1, 1])
-        b_conv1 = bias_variable([1])
-        X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
-        X = tf.reshape(X, [train_batch_size, -1, num_features])
-        #X = tf.Print(X, [tf.shape(X)])
-
     with tf.name_scope("inlayer"):
         X = tf.reshape(X, [-1, num_features])
         X_in = tf.matmul(X, weights['in']) + b['in']
@@ -129,7 +105,7 @@ def train(train_set, eval_set, y, cost, optimizer):
         while not epoch_done:
             global_step += 1
             batch += 1
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size)
             if batch_data is None:
                 # Epoch is finished
                 epoch_done = True
@@ -171,7 +147,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         while not end_of_eval:
 
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size)
 
             if batch_data is None:
                 end_of_eval = True
@@ -199,7 +175,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         while not end_of_cross_val:
 
-            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size)
 
             if batch_data is None:
                 end_of_cross_val = True
@@ -224,13 +200,13 @@ def train(train_set, eval_set, y, cost, optimizer):
         eval_acc_mean = np.mean(np.array(accuracies_val))
         print("epoch %d finished, accuracy: %g" % (epoch, acc_mean))
         print("valication accuracy: %g" % (eval_acc_mean))
-        save_path = saver.save(sess, "%s/models_cnn/%s/epoch%d_model.ckpt"%(save_loc, start_date, epoch))
+        save_path = saver.save(sess, "%s/models/%s/epoch%d_model.ckpt"%(save_loc, start_date, epoch))
         print("Model for epoch %d saved in file: %s"%(epoch, save_path))
         train_set.reset_epoch(train_batch_size)
 
     
 def train_rnn(data_folder, model_file = None):
-    y = RNN_CNN(x)
+    y = RNN(x)
     
     print("Loading training pickles..")   
 
@@ -238,6 +214,9 @@ def train_rnn(data_folder, model_file = None):
     # Sentences are padded to num_steps
     train_set, eval_set = import_data.load_dataset(data_folder + '/train_data.pkl', 
                                          data_folder + '/train_mapped_label.pkl',
+                                         keep_sentences=True,
+                                         context_frames=1,
+                                         seq_length=1,
                                          batch_size=train_batch_size)
 
     print("Loading done")
@@ -249,11 +228,11 @@ def train_rnn(data_folder, model_file = None):
     saver = tf.train.Saver()
 
     # Create the dir for the model
-    if not os.path.isdir('%s/models_cnn/%s'%(save_loc,start_date)):
+    if not os.path.isdir('%s/models/%s'%(save_loc,start_date)):
         try:
-            os.makedirs('%s/models_cnn/%s'%(save_loc,start_date))
+            os.makedirs('%s/models/%s'%(save_loc,start_date))
         except OSError:
-            if not os.path.isdir('%s/models_cnn/%s'%(save_loc,start_date)):
+            if not os.path.isdir('%s/models/%s'%(save_loc,start_date)):
                 raise
     
     sess = tf.InteractiveSession()
@@ -268,7 +247,7 @@ def train_rnn(data_folder, model_file = None):
     if (optimizer_name == 'Adam'):
 
         temp = set(tf.all_variables())
-        optimizer = tf.train.AdamOptimizer(0.001).minimize(cost)
+        optimizer = tf.train.AdamOptimizer(0.00001).minimize(cost)
         sess.run(tf.initialize_variables(set(tf.all_variables()) - temp))
     else:
         optimizer = tf.train.GradientDescentOptimizer(0.02).minimize(cost)
@@ -284,22 +263,22 @@ def train_rnn(data_folder, model_file = None):
     print("Training network. Date: %s" % start_date)
     train(train_set, eval_set, y, cost, optimizer)
     
-    save_path = saver.save(sess, "%s/models_cnn/%s/model.ckpt"%(save_loc,start_date))
+    save_path = saver.save(sess, "%s/models/%s/model.ckpt"%(save_loc,start_date))
     print("Model saved in file: %s" % save_path)
     print("Summaries written to %s/summaries/%s" % (save_loc, start_date))
     
     #evaluate_rnn(data_folder, y)
     
-def evaluate_rnn_model_from_file(data_folder, model_file):
-    #Load the CNN_RNN graph
-    y = RNN_CNN(x)
-    saver = tf.train.Saver()
-    global sess
-    sess = tf.InteractiveSession()
-    saver.restore(sess, model_file)
-    print("Model restored")
+# def evaluate_rnn_model_from_file(data_folder, model_file):
+#     y, rnn_state = RNN(x)
+#     # Op for saving and restoring the model
+#     saver = tf.train.Saver()
+#     global sess
+#     sess = tf.InteractiveSession()
+#     saver.restore(sess, model_file)
+#     print("Model restored")
     
-    evaluate_rnn(data_folder, y)
+#     evaluate_rnn(data_folder, y, rnn_state)
 
 # def evaluate_sentence(test_set, y, rnn_state, times, i):
 #     end_of_sentence = False
@@ -337,45 +316,49 @@ def evaluate_rnn_model_from_file(data_folder, model_file):
 #     phones_pred, phones_true, cross_entropy = evaluation.frames_to_phones(prediction, true_labels, times)
 #     return phones_pred, phones_true, frame_acc, sess.run(cross_entropy)
         
-def evaluate_rnn(data_folder, y):
-    # For evaluation, we run the same loop as in training, 
-    # without optimization. The batch size remains the same, because a higher
-    # batch size would lead to less sentences being evaluated
+# def evaluate_rnn(data_folder, y, rnn_state):
+#     # For evaluation, we run the same loop as in training, 
+#     # without optimization. The batch size remains the same, because a higher
+#     # batch size would lead to less sentences being evaluated
+#     test_set = import_data.load_dataset(data_folder + '/test_data.pickle', 
+#                                          data_folder + '/test_labels.pickle',
+#                                          keep_sentences=True,
+#                                          context_frames=1,
+#                                          seq_length=num_steps,
+#                                          batch_size=1)
+                                         
+#     with open(data_folder + '/test_times.pickle', 'rb') as times_dump:
+#         times = cPickle.load(times_dump)
 
-    r = tf.argmax(y,1)
-    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl',batch_size=1)
-    # Create arrays that will contain evaluation metrics per sentence    
-    phones_pred = []
-    phones_true = []
-    frame_accuracies = []
-    cross_entropies = []
-
-
-    end_of_test = False
-
-    while not end_of_test:
-
-            batch_data, seq_len = test_set.next_test_batch(train_batch_size, _pad=True)
-
-            if batch_data is None:
-                end_of_test = True
-                break
-            # Reset the LSTM State for the sequences that ended, 
-            # otherwise use the previous state
-
-            feed_dict = {
-                x: batch_data,
-                sequence_len: seq_len,
-                batch_size: 1,
-                keep_prob: 1.0
-            }
-            
-            result = sess.run([r], feed_dict=feed_dict)
-            print(result)
-            print(result[0].shape)
-            break
+#     # Create arrays that will contain evaluation metrics per sentence    
+#     phones_pred = []
+#     phones_true = []
+#     frame_accuracies = []
+#     cross_entropies = []
     
-
+#     for i in range(len(times)):
+#         print(i)
+#         pred, true_l, frame_acc, cross_entropy = evaluate_sentence(test_set, y, rnn_state, times[i],i)    
+#         if frame_acc is None:
+#             break
+#         frame_accuracies.append(frame_acc)
+#         phones_pred.append(pred)
+#         phones_true.append(true_l)
+#         cross_entropies.append(cross_entropy)
+    
+#     phones_pred = np.hstack(phones_pred)
+#     phones_true = np.hstack(phones_true)
+    
+#     phone_accuracy = np.mean(np.equal(phones_pred, phones_true))
+    
+#     # Get the total accuraries
+#     frame_accuracy = np.mean(frame_accuracies)
+#     cross_entropy = np.mean(cross_entropies)
+    
+#     print("Test frame accuracy: %f"%frame_accuracy)
+#     print("Test phone accuracy: %f"%phone_accuracy)
+#     print("Average phone-level cross entropy: %f"%cross_entropy)
+#     evaluation.save_confusion_matrix(phones_true, phones_pred, start_date)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description='Train and evaluate the LSTM model.')
@@ -383,19 +366,21 @@ if __name__ == "__main__":
     ap.add_argument('-e', '--epochs', type=int, help='Number of epochs for training')
     ap.add_argument('-b', '--batch_size', type=int, help='Size of each minibatch')
     ap.add_argument('-d', '--dropout', action='store_false', help="Don't apply dropout regularization")
+    ap.add_argument('-l', '--seq_length', type=int, help='Number of frames per subsequence.')
     ap.add_argument('-m', '--model', type=str, help='.ckpt file of the model. If -t option is used, evaluate this model. Otherwise, train it.')
     ap.add_argument('-n', '--num_hidden_layers', type=int, help='Number of hidden LSTM layers')
     ap.add_argument('-o', '--optimizer', type=str, help='Optimizer. Either "Adam" or "GradDesc"')
     ap.add_argument('-s', '--size_hidden', type=int, help='Number of neurons in each hidden LSTM layer')
     ap.add_argument('-t', '--test', action='store_true', help='Evaluate a given model.')
-
-    ap.set_defaults(epochs = num_epochs,
-                    batch_size = train_batch_size, 
-                    test = False,
-                    size_hidden = num_hidden,
-                    num_hidden_layers = num_lstm_layers,
-                    dropout = use_dropout,
-                    optimizer = optimizer_name)
+    
+    ap.set_defaults(epochs=15,
+                    batch_size=32, 
+                    test=False,
+                    size_hidden=250,
+                    num_hidden_layers=1,
+                    seq_length=800,
+                    dropout=True,
+                    optimizer='Adam')
                     
     args = ap.parse_args()
 
@@ -406,11 +391,12 @@ if __name__ == "__main__":
     train_batch_size = args.batch_size    
     num_hidden = args.size_hidden
     num_lstm_layers = args.num_hidden_layers
+    num_steps = args.seq_length
     use_dropout = args.dropout
     
     if args.test:
         assert args.model, "Model file is required for evaluation."
-        evaluate_rnn_model_from_file(data_folder, args.model)
+        evaluate_rnn_model_from_file(args.data_folder, args.model)
     else:
         train_rnn(data_folder, args.model)
 

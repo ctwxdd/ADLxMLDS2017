@@ -104,5 +104,9 @@ ENV/
 *.wav
 *.ark
 *.zip
+*.pkl
+
+#model file
+/HW1/output/*
 
 
