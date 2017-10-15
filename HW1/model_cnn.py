@@ -8,6 +8,7 @@ import sys
 sys.path.append("./Utils")
 from Utils import import_data
 from Utils import layers
+from Utils import map_reader
 from tensorflow.contrib.rnn import BasicLSTMCell
 
 data_folder = './data'
@@ -17,7 +18,7 @@ NUM_CLASSES = 48
 num_epochs = 15
 train_batch_size = 32
 num_hidden = 500
-num_lstm_layers = 1
+num_lstm_layers = 3
 num_steps = 800
 use_dropout = True
 optimizer_name='Adam'
@@ -78,10 +79,9 @@ def conv2d(x, W):
 
 def RNN_CNN(X):
     
-
     with tf.name_scope("conv_1"):
         X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
-        W_conv1 = weight_variable([3, 1, 1, 1])
+        W_conv1 = weight_variable([5, 1, 1, 1])
         b_conv1 = bias_variable([1])
         X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
         X = tf.reshape(X, [train_batch_size, -1, num_features])
@@ -93,7 +93,16 @@ def RNN_CNN(X):
         X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
 
     with tf.name_scope("RNN_CELL"):
-        lstm_cell = BasicLSTMCell(num_hidden)
+
+        cells = []
+
+        for n in range(num_lstm_layers):
+            cells.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, state_is_tuple=True))
+
+        lstm_cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=True)
+        
+        
+        #lstm_cell = BasicLSTMCell(num_hidden)
         lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell,input_keep_prob=keep_prob)
         rnn_out, states = tf.nn.dynamic_rnn(lstm_cell, X_in, sequence_length=sequence_len, dtype=tf.float32)
 
@@ -110,26 +119,17 @@ def train(train_set, eval_set, y, cost, optimizer):
 
     with tf.name_scope('correct_prediction'):
         correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(true_labels, 1))
-        #correct_prediction = tf.Print(cp, [tf.argmax(y, 1), tf.argmax(true_labels, 1)], message="y, y_")
-        
+
     with tf.name_scope('accuracy'):
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32)) 
-        # with tf.name_scope('summaries'):
-        #     tf.scalar_summary('accuracy', accuracy)
-
-    global summary_op
-    global train_writer
-    
-    global_step = 0
     
     for epoch in range(num_epochs):
         print("epoch %d:" % epoch)
         epoch_done = False
         batch = 0
         while not epoch_done:
-            global_step += 1
             batch += 1
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=2)
             if batch_data is None:
                 # Epoch is finished
                 epoch_done = True
@@ -142,12 +142,11 @@ def train(train_set, eval_set, y, cost, optimizer):
                 y_: batch_labels,
                 sequence_len: seq_len,
                 batch_size: train_batch_size,
-                keep_prob: 0.8
+                keep_prob: 0.75
             }                        
             
             if batch%50 == 0:
                 train_accuracy = sess.run([ accuracy],feed_dict=feed_dict)  
-                #train_writer.add_summary(acc_summ, global_step)            
                 print("epoch %d, batch %d, training accuracy %g"%(epoch, batch, train_accuracy[0]))
             
             feed_dict[keep_prob] = 0.8
@@ -156,12 +155,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
             if batch%50 == 0:
                 print("cross entropy: %g"%c_e)
-            
-        
-        # After every epoch, we use the entire data set as one batch
-        # and evaluate the performance up to the length of the shortest
-        # sentence. This is a very rough estimate of the accuracy,
-        # because the ends of many sentences are not taken into account
+
         num_examples = train_set.data.shape[0]
         train_set.reset_epoch(train_batch_size)
         
@@ -171,13 +165,11 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         while not end_of_eval:
 
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=2)
 
             if batch_data is None:
                 end_of_eval = True
                 break
-            # Reset the LSTM State for the sequences that ended, 
-            # otherwise use the previous state
 
             feed_dict = {
                 x: batch_data,
@@ -190,16 +182,13 @@ def train(train_set, eval_set, y, cost, optimizer):
             acc = sess.run([accuracy], feed_dict=feed_dict)
             accuracies.append(acc)
 
-            #num_examples = train_set.data.shape[0]
         train_set.reset_epoch(train_batch_size)
-        
         end_of_cross_val = False
-
         accuracies_val = []
 
         while not end_of_cross_val:
 
-            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=True)
+            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=2)
 
             if batch_data is None:
                 end_of_cross_val = True
@@ -301,41 +290,6 @@ def evaluate_rnn_model_from_file(data_folder, model_file):
     
     evaluate_rnn(data_folder, y)
 
-# def evaluate_sentence(test_set, y, rnn_state, times, i):
-#     end_of_sentence = False
-    
-#     prediction = []
-#     true_labels = []    
-    
-#     last_state = np.zeros([1, num_hidden*2*num_lstm_layers])
-    
-#     while not end_of_sentence:
-#         data, labels, seq_len = test_set.next_batch(train_batch_size)
-#         if data is None:
-#             # Entire test set is done
-#             return None, None, None, None
-        
-#         feed_dict = {
-#             x: data,
-#             y_: labels,
-#             batch_size: 1,
-#             sequence_len: seq_len,
-#             keep_prob: 1.0
-#         }                        
-        
-#         pred, last_state = sess.run([y, rnn_state], feed_dict=feed_dict)
-#         prediction.append(pred)
-#         true_labels.append(labels[0])
-    
-#     prediction = np.reshape(prediction, [-1, num_classes])
-#     true_labels = np.reshape(true_labels, [-1, num_classes])
-#     # Compute the frame accuracy
-#     correct_prediction = np.equal(evaluation.fold_labels(np.argmax(prediction, 1)), 
-#                                   evaluation.fold_labels(np.argmax(true_labels, 1)))
-#     frame_acc = np.mean(np.asarray(correct_prediction, float))
-    
-#     phones_pred, phones_true, cross_entropy = evaluation.frames_to_phones(prediction, true_labels, times)
-#     return phones_pred, phones_true, frame_acc, sess.run(cross_entropy)
         
 def evaluate_rnn(data_folder, y):
     # For evaluation, we run the same loop as in training, 
@@ -343,26 +297,30 @@ def evaluate_rnn(data_folder, y):
     # batch size would lead to less sentences being evaluated
 
     r = tf.argmax(y,1)
-    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl',batch_size=1)
+    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl', data_folder + '/test_name.pkl', batch_size=1)
     # Create arrays that will contain evaluation metrics per sentence    
     phones_pred = []
     phones_true = []
     frame_accuracies = []
     cross_entropies = []
 
-
     end_of_test = False
 
+    phone_list = map_reader.phone_list('./data/48phone_char.map')
+    phone_char_map = map_reader.phone_char_reader('./data/48phone_char.map')
+    phone_map = map_reader.phone_map_reader('./data/phones/48_39.map')
+    
+    f = open('out.csv', 'w')
+    f.write('id,phone_sequence\n')
     while not end_of_test:
 
-            batch_data, seq_len = test_set.next_test_batch(train_batch_size, _pad=True)
+            batch_data, seq_len, name_list = test_set.next_test_batch(train_batch_size, _pad=True)
 
             if batch_data is None:
                 end_of_test = True
                 break
             # Reset the LSTM State for the sequences that ended, 
             # otherwise use the previous state
-
             feed_dict = {
                 x: batch_data,
                 sequence_len: seq_len,
@@ -371,10 +329,30 @@ def evaluate_rnn(data_folder, y):
             }
             
             result = sess.run([r], feed_dict=feed_dict)
-            print(result)
-            print(result[0].shape)
-            break
-    
+
+            
+            #print(result)
+            #print(result[0].shape)
+            mapped_result = [phone_list[i] for i in result[0]]
+            #print(mapped_result)
+            mapped_char_result = [phone_char_map[i] for i in mapped_result]
+            #print(mapped_char_result)
+            result_str = remove_duplicate(mapped_char_result)
+            print('%s,%s' % (name_list[0], result_str))
+            f.write('%s,%s\n' % (name_list[0], result_str))
+
+
+def remove_duplicate(raw_list):
+    rst = []
+    current = 'L'
+    for i in raw_list:
+        if i != current:
+            rst.append(i)
+            current = i
+    result = ''.join(rst).strip('L')
+    return result
+            
+        
 
 
 if __name__ == "__main__":

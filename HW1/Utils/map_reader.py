@@ -19,4 +19,14 @@ def phone_char_reader(path_to_phone_char_map):
 
     return mapping 
 
+def phone_list(path_to_phone_char_map):
+    """"parse phone list"""
+    phone_list = []
+    with open(path_to_phone_char_map) as f:
+        for line in f:
+            m = line.strip().split('\t')
+            phone_list.append(m[0])
+
+    return phone_list
+
         

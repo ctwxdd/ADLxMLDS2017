@@ -34,12 +34,14 @@ def load_dataset(data_pickle,
     return DataSet(np.array(data[eval:]), np.array(labels[eval:]), batch_size), DataSet(np.array(data[:eval]), np.array(labels[:eval]), batch_size)
 
 
-def load_test_dataset(data_pickle, 
+def load_test_dataset(data_pickle, name_pickle,
                  batch_size=1,
                  normalization=True):
     
     with open(data_pickle, 'rb') as data_dump:
         data_sentences = pickle.load(data_dump)
+    with open(name_pickle, 'rb') as name_dump:
+        name_list = pickle.load(name_dump)
     
     # Normalize the mfccs
     if normalization:
@@ -49,12 +51,13 @@ def load_test_dataset(data_pickle,
         data = data_sentences
 
     print("Preprocessing done")
-    return DataSet(np.array(data), None, batch_size)
+    return DataSet(np.array(data), None, batch_size,  name_list)
 
 
 class DataSet(object):
-    def __init__(self, data, labels, batch_size=6):
+    def __init__(self, data, labels, batch_size=6, name_list = None):
         self._data = data
+        self._name_list =name_list
         self._labels = labels
         self._epochs_completed = 0
         self._index_in_epoch = 0
@@ -90,7 +93,7 @@ class DataSet(object):
         self._data = self._data[perm]
         self._labels = self._labels[perm]
     
-    def next_batch(self, batch_size, _pad=False):
+    def next_batch(self, batch_size, _pad=0 ):
 
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
@@ -117,10 +120,7 @@ class DataSet(object):
         for s in self._data[start:end]:
             max_seq_len = max(s.shape[0], max_seq_len)
 
-        p = 0
-
-        if(_pad):
-            p=1
+        p = _pad
             
         for s in self._data[start:end]:
             sl = s.shape[0]
@@ -134,7 +134,7 @@ class DataSet(object):
         return np.array(batch_data), np.array(batch_label), seq_len
 
 
-    def next_test_batch(self, batch_size, _pad=False):
+    def next_test_batch(self, batch_size, _pad=0):
 
         start = self._index_in_epoch
         self._index_in_epoch += batch_size
@@ -152,14 +152,11 @@ class DataSet(object):
         for s in self._data[start:end]:
             max_seq_len = max(s.shape[0], max_seq_len)
 
-        p = 0
-
-        if(_pad):
-            p=1
+        p = _pad
             
         for s in self._data[start:end]:
             sl = s.shape[0]
             seq_len.append(sl)
             batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'edge'))
 
-        return np.array(batch_data), seq_len
+        return np.array(batch_data), seq_len, self._name_list[start:end]

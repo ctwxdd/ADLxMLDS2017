@@ -55,6 +55,8 @@ def convert_testing_data(mfccPath):
     print("%d sample in testing set" % len(inputlist))
     with open('../data/test_data.pkl', 'wb') as test_data:
         pickle.dump(inputlist, test_data)
+    with open('../data/test_name.pkl', 'wb') as test_name:
+        pickle.dump(inputnamelist, test_name)
 
 
 def convert_data(mfccPath, labelPath):
@@ -109,6 +111,8 @@ def phone_int_mapping(path_to_phone_char_map):
             mapping[m[0]] = int(m[1])
 
     return mapping 
+
+
 
 def main():
     mfcc_path = '../data/mfcc'
