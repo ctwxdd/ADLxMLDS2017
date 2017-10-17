@@ -2,6 +2,7 @@ import pickle
 import numpy as np
 import pdb
 import preprocessing as pp
+import random
 
 NUM_CLASSES = 48
 
@@ -27,9 +28,9 @@ def load_dataset(data_pickle,
     # Possibly flatten the sentences
     if to_one_hot:
         labels = [pp.to_one_hot(labels_scalar, NUM_CLASSES) for labels_scalar in labels_sentences]
-
+    
     print("Preprocessing done")
-    eval = int(len(data) / 5)
+    eval = int(len(data) / 1000)
     #return DataSet(np.array(data), np.array(labels), batch_size)    
     return DataSet(np.array(data[eval:]), np.array(labels[eval:]), batch_size), DataSet(np.array(data[:eval]), np.array(labels[:eval]), batch_size)
 

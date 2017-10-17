@@ -18,13 +18,13 @@ NUM_CLASSES = 48
 num_epochs = 15
 train_batch_size = 32
 num_hidden = 500
-num_lstm_layers = 3
+num_lstm_layers = 2
 num_steps = 800
 use_dropout = True
 optimizer_name='Adam'
 
 ### Internal variables
-num_features = 39
+num_features = 69
 num_classes = 48
 start_date = time.strftime("%d-%m-%y/%H.%M.%S")
 save_loc = "./output"

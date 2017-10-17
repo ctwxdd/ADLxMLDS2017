@@ -18,13 +18,15 @@ NUM_CLASSES = 48
 num_epochs = 15
 train_batch_size = 32
 num_hidden = 500
-num_lstm_layers = 3
+num_lstm_layers = 2
 num_steps = 800
 use_dropout = True
 optimizer_name='Adam'
+learn_rate = 0.001
+contex = 2
 
 ### Internal variables
-num_features = 39
+num_features = 69
 num_classes = 48
 start_date = time.strftime("%d-%m-%y/%H.%M.%S")
 save_loc = "./output"
@@ -40,7 +42,7 @@ y_ = tf.placeholder(tf.float32, [None, None, num_classes], name='y_')
 true_labels = tf.reshape(y_, [-1, num_classes])
 
 # Initial state for the LSTM
-sequence_len = tf.placeholder(tf.float32, [None], name='sequence_len')
+sequence_len = tf.placeholder(tf.int32, [None], name='sequence_len')
 
 # Probability of keeping nodes at dropout
 keep_prob = tf.placeholder(tf.float32, name='keep_prob')
@@ -54,7 +56,7 @@ saver = None
 
 weights = {
     'in': tf.Variable(tf.random_uniform([num_features, num_hidden], -1.0, 1.0), name="in_w"),
-    'out': tf.Variable(tf.random_uniform([num_hidden, num_classes], -1.0, 1.0), name="out_w"),
+    'out': tf.Variable(tf.random_uniform([num_hidden * 2, num_classes], -1.0, 1.0), name="out_w"),
 }
 b = {
     'in': tf.Variable(tf.constant(0.1, shape=[num_hidden]), name="in_bias"),
@@ -77,14 +79,92 @@ def weight_variable(shape):
 def conv2d(x, W):
   return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='VALID')
 
+def BiRNN(X):
+
+    with tf.name_scope("conv_1"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        W_conv1 = weight_variable([3, 1, 1, 16])
+        b_conv1 = bias_variable([16])
+        X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
+        #X = tf.Print(X, [tf.shape(X)])
+
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        
+    with tf.name_scope("conv_2"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        W_conv2 = weight_variable([3, 1, 16, 1])
+        b_conv2 = bias_variable([1])
+        X = tf.nn.relu(conv2d(X, W_conv2) + b_conv2)
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+
+        #X = tf.Print(X, [tf.shape(X)])
+    # with tf.name_scope("conv_3"):
+    #     X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+    #     W_conv3 = weight_variable([1, 1, 16, 1])
+    #     b_conv3 = bias_variable([1])
+    #     X = tf.nn.relu(conv2d(X, W_conv3) + b_conv3)
+    #     X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+    #     #X = tf.Print(X, [tf.shape(X)])
+
+    with tf.name_scope("inlayer"):
+        X = tf.reshape(X, [-1, num_features])
+        X_in = tf.matmul(X, weights['in']) + b['in']
+        X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
+
+    with tf.name_scope("rnn_cell"):    
+        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+        # Backward direction cell
+        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+
+
+        lstm_fw_celll = tf.nn.rnn_cell.DropoutWrapper(lstm_fw_cell,input_keep_prob=keep_prob)
+        lstm_bw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_bw_cell,input_keep_prob=keep_prob)
+
+        # Get lstm cell output
+        raw_rnn_out, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, X_in,
+                                                sequence_length=sequence_len, dtype=tf.float32)
+        fw_rnn_out, bw_rnn_out = raw_rnn_out
+        #fw_rnn_out = tf.Print(fw_rnn_out, [tf.shape(fw_rnn_out)])
+        #bw_rnn_out = tf.Print(bw_rnn_out, [tf.shape(bw_rnn_out)])
+        rnn_out= tf.concat([fw_rnn_out, bw_rnn_out], 2)
+        #rnn_out = tf.Print(rnn_out, [tf.shape(rnn_out)])
+
+
+    # Linear activation, using rnn inner loop last output
+    with tf.name_scope("out_layer"):
+        rnn_out = tf.reshape(rnn_out,[-1, num_hidden * 2])        
+        results = tf.matmul(rnn_out, weights['out']) + b['out']
+    
+    print("Model creation done")
+    
+    return results
+
+
 def RNN_CNN(X):
     
     with tf.name_scope("conv_1"):
         X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
-        W_conv1 = weight_variable([5, 1, 1, 1])
-        b_conv1 = bias_variable([1])
+        W_conv1 = weight_variable([3, 1, 1, 16])
+        b_conv1 = bias_variable([16])
         X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
-        X = tf.reshape(X, [train_batch_size, -1, num_features])
+        #X = tf.Print(X, [tf.shape(X)])
+
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        
+    with tf.name_scope("conv_2"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        W_conv2 = weight_variable([3, 1, 16, 16])
+        b_conv2 = bias_variable([16])
+        X = tf.nn.relu(conv2d(X, W_conv2) + b_conv2)
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+
+        #X = tf.Print(X, [tf.shape(X)])
+    with tf.name_scope("conv_3"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        W_conv3 = weight_variable([1, 1, 16, 1])
+        b_conv3 = bias_variable([1])
+        X = tf.nn.relu(conv2d(X, W_conv3) + b_conv3)
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
         #X = tf.Print(X, [tf.shape(X)])
 
     with tf.name_scope("inlayer"):
@@ -129,7 +209,7 @@ def train(train_set, eval_set, y, cost, optimizer):
         batch = 0
         while not epoch_done:
             batch += 1
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=2)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=contex)
             if batch_data is None:
                 # Epoch is finished
                 epoch_done = True
@@ -165,7 +245,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         while not end_of_eval:
 
-            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=2)
+            batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=contex)
 
             if batch_data is None:
                 end_of_eval = True
@@ -188,7 +268,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         while not end_of_cross_val:
 
-            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=2)
+            batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=contex)
 
             if batch_data is None:
                 end_of_cross_val = True
@@ -219,8 +299,8 @@ def train(train_set, eval_set, y, cost, optimizer):
 
     
 def train_rnn(data_folder, model_file = None):
-    y = RNN_CNN(x)
-    
+    #y = RNN_CNN(x)
+    y=BiRNN(x)
     print("Loading training pickles..")   
 
     # We want to keep the sentences in order to train per sentence
@@ -257,7 +337,7 @@ def train_rnn(data_folder, model_file = None):
     if (optimizer_name == 'Adam'):
 
         temp = set(tf.all_variables())
-        optimizer = tf.train.AdamOptimizer(0.001).minimize(cost)
+        optimizer = tf.train.AdamOptimizer(learn_rate).minimize(cost)
         sess.run(tf.initialize_variables(set(tf.all_variables()) - temp))
     else:
         optimizer = tf.train.GradientDescentOptimizer(0.02).minimize(cost)
@@ -281,7 +361,7 @@ def train_rnn(data_folder, model_file = None):
     
 def evaluate_rnn_model_from_file(data_folder, model_file):
     #Load the CNN_RNN graph
-    y = RNN_CNN(x)
+    y = BiRNN(x)
     saver = tf.train.Saver()
     global sess
     sess = tf.InteractiveSession()
@@ -314,7 +394,7 @@ def evaluate_rnn(data_folder, y):
     f.write('id,phone_sequence\n')
     while not end_of_test:
 
-            batch_data, seq_len, name_list = test_set.next_test_batch(train_batch_size, _pad=True)
+            batch_data, seq_len, name_list = test_set.next_test_batch(train_batch_size, _pad=contex)
 
             if batch_data is None:
                 end_of_test = True
@@ -335,7 +415,21 @@ def evaluate_rnn(data_folder, y):
             #print(result[0].shape)
             mapped_result = [phone_list[i] for i in result[0]]
             #print(mapped_result)
-            mapped_char_result = [phone_char_map[i] for i in mapped_result]
+
+            for i in range(1,len(mapped_result)-1):
+                if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
+                    print(mapped_result[i-10 : i+10])
+                    print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
+                    mapped_result[i] = mapped_result[i-1]
+                    continue
+
+                if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
+                    print(mapped_result[i-10 : i+10])
+                    print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
+                    mapped_result[i] = mapped_result[i-1]
+
+            phone39_result = [phone_map[i] for i in mapped_result]
+            mapped_char_result = [phone_char_map[i] for i in phone39_result]
             #print(mapped_char_result)
             result_str = remove_duplicate(mapped_char_result)
             print('%s,%s' % (name_list[0], result_str))
@@ -377,7 +471,7 @@ if __name__ == "__main__":
                     
     args = ap.parse_args()
 
-    assert (args.optimizer == 'Adam' or args.optimizer == 'GradDesc'), 'Optimizer must be either "Adam" or "GradDesc": %s'%args.optimizer
+    assert (args.optimizer == 'Adam' or args.optimizer == 'GradDesc'), 'Optimizer must be either "Adam" or "GradDesc": %s' % args.optimizer
     optimizer_name = args.optimizer
 
     num_epochs = args.epochs

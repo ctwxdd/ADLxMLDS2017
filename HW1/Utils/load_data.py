@@ -110,15 +110,33 @@ def phone_int_mapping(path_to_phone_char_map):
             m = line.strip().split('\t')
             mapping[m[0]] = int(m[1])
 
-    return mapping 
+    return mapping
 
 
 
 def main():
-    mfcc_path = '../data/mfcc'
+    data_source = 'fbank' # mfcc or fbank
+    data_path = '../data/' +  data_source
     label_path = '../data/label'
-    #convert_data(mfcc_path, label_path)
-    convert_testing_data(mfcc_path)
+    path_to_phone_char_map = '../data/48phone_char.map'
+
+    #convert_data(data_path, label_path)
+
+    mapping = phone_int_mapping(path_to_phone_char_map)
+    
+    with open('../data/train_label.pkl', 'rb') as f:
+        label = pickle.load(f)
+    labellist = []
+    input = []
+    for i in label:
+        input = []
+        for l in i:
+            input.append(mapping[l])
+        labellist.append(input)
+    with open('../data/train_mapped_label.pkl', 'wb') as train_label:
+        pickle.dump( labellist, train_label) 
+
+    convert_testing_data(data_path)
 
 
 if __name__ == "__main__":
