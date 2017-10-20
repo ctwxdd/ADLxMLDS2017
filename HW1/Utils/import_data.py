@@ -30,7 +30,7 @@ def load_dataset(data_pickle,
         labels = [pp.to_one_hot(labels_scalar, NUM_CLASSES) for labels_scalar in labels_sentences]
     
     print("Preprocessing done")
-    eval = int(len(data) / 1000)
+    eval = int(len(data) / 50)
     #return DataSet(np.array(data), np.array(labels), batch_size)    
     return DataSet(np.array(data[eval:]), np.array(labels[eval:]), batch_size), DataSet(np.array(data[:eval]), np.array(labels[:eval]), batch_size)
 
@@ -126,13 +126,14 @@ class DataSet(object):
         for s in self._data[start:end]:
             sl = s.shape[0]
             seq_len.append(sl)
-            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'edge'))
+            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'constant' , constant_values=(0)))
         
         for s in self._labels[start:end]:
             sl = s.shape[0]
-            batch_label.append(np.lib.pad(s, ((0,max_seq_len-sl),(0,0)), 'edge'))
+            batch_label.append(np.lib.pad(s, ((0,max_seq_len-sl),(0,0)), 'constant' , constant_values=(0)))
 
         return np.array(batch_data), np.array(batch_label), seq_len
+
 
 
     def next_test_batch(self, batch_size, _pad=0):
@@ -158,6 +159,6 @@ class DataSet(object):
         for s in self._data[start:end]:
             sl = s.shape[0]
             seq_len.append(sl)
-            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'edge'))
+            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'constant' , constant_values=(0)))
 
         return np.array(batch_data), seq_len, self._name_list[start:end]

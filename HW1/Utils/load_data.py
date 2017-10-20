@@ -53,10 +53,32 @@ def convert_testing_data(mfccPath):
     inputlist, inputnamelist = ark_parser(mfccPath, 'test.ark')
 
     print("%d sample in testing set" % len(inputlist))
+    with open(mfccPath + '_data/test_data.pkl', 'wb') as test_data:
+        pickle.dump(inputlist, test_data)
+    with open(mfccPath +'_data/test_name.pkl', 'wb') as test_name:
+        pickle.dump(inputnamelist, test_name)
+
+def convert_all_test_data(mfccPath, fbankPath):
+    """convert training data to pkl file"""
+    inputmfcc, inputnamemfcc = ark_parser(mfccPath, 'test.ark')
+    inputfbank, inputnamefbank = ark_parser(fbankPath, 'test.ark')
+
+    label = []
+    assert len(inputnamemfcc) == len(inputnamefbank)
+
+
+    inputlist = []
+
+    for fb, mfcc in zip(inputfbank, inputmfcc):
+        inputlist.append(np.concatenate((fb, mfcc), axis=1))
+
+    print(len(inputlist))
+    print(inputlist[0].shape)
+    print(inputlist[1].shape)
+
+
     with open('../data/test_data.pkl', 'wb') as test_data:
         pickle.dump(inputlist, test_data)
-    with open('../data/test_name.pkl', 'wb') as test_name:
-        pickle.dump(inputnamelist, test_name)
 
 
 def convert_data(mfccPath, labelPath):
@@ -75,6 +97,34 @@ def convert_data(mfccPath, labelPath):
 
     with open('../data/train_label.pkl', 'wb') as train_label:
         pickle.dump( label, train_label )
+
+def convert_all_data(mfccPath, fbankPath, labelPath):
+    """convert training data to pkl file"""
+    inputmfcc, inputnamemfcc = ark_parser(mfccPath, 'train.ark')
+    inputfbank, inputnamefbank = ark_parser(fbankPath, 'train.ark')
+
+    labeldict = lab_parser(labelPath)
+
+    label = []
+    assert len(inputnamemfcc) == len(labeldict.keys()) and len(inputnamefbank) == len(labeldict.keys())
+
+
+    inputlist = []
+
+    for fb, mfcc in zip(inputfbank, inputmfcc):
+        inputlist.append(np.concatenate((fb, mfcc), axis=1))
+    print(len(inputlist))
+    print(inputlist[0].shape)
+    print(inputlist[1].shape)
+    for name in inputnamemfcc:
+        label.append(labeldict[name])
+
+    with open('../data/train_data.pkl', 'wb') as train_data:
+        pickle.dump(inputlist, train_data)
+
+    with open('../data/train_label.pkl', 'wb') as train_label:
+        pickle.dump( label, train_label )
+
 
 def phone_map_reader(path_to_phone_map):
     """48 phone to 39 phone"""
@@ -115,26 +165,30 @@ def phone_int_mapping(path_to_phone_char_map):
 
 
 def main():
-    data_source = 'fbank' # mfcc or fbank
+    data_source = 'mfcc' # mfcc or fbank
     data_path = '../data/' +  data_source
     label_path = '../data/label'
     path_to_phone_char_map = '../data/48phone_char.map'
+    mfcc_path =  '../data/mfcc'
+    fbank_path = '../data/fbank'
 
+    #convert_all_test_data(mfcc_path, fbank_path)
+    #exit()
     #convert_data(data_path, label_path)
-
-    mapping = phone_int_mapping(path_to_phone_char_map)
+    # convert_all_data(mfcc_path, fbank_path, label_path)
+    # mapping = phone_int_mapping(path_to_phone_char_map)
     
-    with open('../data/train_label.pkl', 'rb') as f:
-        label = pickle.load(f)
-    labellist = []
-    input = []
-    for i in label:
-        input = []
-        for l in i:
-            input.append(mapping[l])
-        labellist.append(input)
-    with open('../data/train_mapped_label.pkl', 'wb') as train_label:
-        pickle.dump( labellist, train_label) 
+    # with open('../data/train_label.pkl', 'rb') as f:
+    #     label = pickle.load(f)
+    # labellist = []
+    # input = []
+    # for i in label:
+    #     input = []
+    #     for l in i:
+    #         input.append(mapping[l])
+    #     labellist.append(input)
+    # with open('../data/train_mapped_label.pkl', 'wb') as train_label:
+    #     pickle.dump( labellist, train_label) 
 
     convert_testing_data(data_path)
 

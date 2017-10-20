@@ -17,32 +17,41 @@ NUM_CLASSES = 48
 ### Parameters (overidden by argparse, default values listed here)
 num_epochs = 15
 train_batch_size = 32
-num_hidden = 64
-num_lstm_layers = 6
+num_hidden = 500
+num_lstm_layers = 2
+num_steps = 800
 use_dropout = True
 optimizer_name='Adam'
 learn_rate = 0.001
-contex = 2
+contex = 3
 
 ### Internal variables
-num_features = 108
+num_features = 69
 num_classes = 48
 start_date = time.strftime("%d-%m-%y/%H.%M.%S")
 save_loc = "./output"
 
 x = tf.placeholder(tf.float32, [None, None, num_features], name='input')
+
+# Times when we want to have an early stop (length = batch_size)
 batch_size = tf.placeholder(tf.int32, name='batch_size')
+
+# Output classes (true values).
 y_ = tf.placeholder(tf.float32, [None, None, num_classes], name='y_')
 
 true_labels = tf.reshape(y_, [-1, num_classes])
 
+# Initial state for the LSTM
 sequence_len = tf.placeholder(tf.int32, [None], name='sequence_len')
+
+# Probability of keeping nodes at dropout
 keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 
 ### Ops
 summary_op = None
 train_writer = None
 sess = None
+# Op for saving and restoring the model
 saver = None
 
 weights = {
@@ -79,40 +88,33 @@ def BiRNN(X):
         X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
         #X = tf.Print(X, [tf.shape(X)])
 
-       # X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
         
     with tf.name_scope("conv_2"):
         X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
-        W_conv2 = weight_variable([3, 1, 16, 1])
+        W_conv2 = weight_variable([3, 1, 16, 16])
         b_conv2 = bias_variable([1])
         X = tf.nn.relu(conv2d(X, W_conv2) + b_conv2)
-        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
 
         #X = tf.Print(X, [tf.shape(X)])
-    # with tf.name_scope("conv_3"):
-    #     X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
-    #     W_conv3 = weight_variable([3, 1, 16, 1])
-    #     b_conv3 = bias_variable([1])
-    #     X = tf.nn.relu(conv2d(X, W_conv3) + b_conv3)
-    #     X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
-    #     #X = tf.Print(X, [tf.shape(X)])
+    with tf.name_scope("conv_3"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        W_conv3 = weight_variable([3, 1, 16, 1])
+        b_conv3 = bias_variable([1])
+        X = tf.nn.relu(conv2d(X, W_conv3) + b_conv3)
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        #X = tf.Print(X, [tf.shape(X)])
 
     with tf.name_scope("inlayer"):
         X = tf.reshape(X, [-1, num_features])
         X_in = tf.matmul(X, weights['in']) + b['in']
         X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
 
-    with tf.name_scope("rnn_cell"):
-
-        fw_cell = []
-        bw_cell = []
-
-        for n in range(num_lstm_layers):
-            fw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))
-            bw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))
-
-        lstm_fw_cell = tf.contrib.rnn.MultiRNNCell(fw_cell, state_is_tuple=True)
-        lstm_bw_cell = tf.contrib.rnn.MultiRNNCell(bw_cell, state_is_tuple=True)
+    with tf.name_scope("rnn_cell"):    
+        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+        # Backward direction cell
+        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
 
 
         lstm_fw_celll = tf.nn.rnn_cell.DropoutWrapper(lstm_fw_cell,input_keep_prob=keep_prob)
@@ -122,7 +124,11 @@ def BiRNN(X):
         raw_rnn_out, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, X_in,
                                                 sequence_length=sequence_len, dtype=tf.float32)
         fw_rnn_out, bw_rnn_out = raw_rnn_out
+        #fw_rnn_out = tf.Print(fw_rnn_out, [tf.shape(fw_rnn_out)])
+        #bw_rnn_out = tf.Print(bw_rnn_out, [tf.shape(bw_rnn_out)])
         rnn_out= tf.concat([fw_rnn_out, bw_rnn_out], 2)
+        #rnn_out = tf.Print(rnn_out, [tf.shape(rnn_out)])
+
 
     # Linear activation, using rnn inner loop last output
     with tf.name_scope("out_layer"):
@@ -287,7 +293,7 @@ def train(train_set, eval_set, y, cost, optimizer):
         eval_acc_mean = np.mean(np.array(accuracies_val))
         print("epoch %d finished, accuracy: %g" % (epoch, acc_mean))
         print("valication accuracy: %g" % (eval_acc_mean))
-        save_path = saver.save(sess, "%s/models_cnn/%s/epoch%d_model.ckpt"%(save_loc, start_date, epoch))
+        save_path = saver.save(sess, "%s/models_best/%s/epoch%d_model.ckpt"%(save_loc, start_date, epoch))
         print("Model for epoch %d saved in file: %s"%(epoch, save_path))
         train_set.reset_epoch(train_batch_size)
 
@@ -312,11 +318,11 @@ def train_rnn(data_folder, model_file = None):
     saver = tf.train.Saver()
 
     # Create the dir for the model
-    if not os.path.isdir('%s/models_cnn/%s'%(save_loc,start_date)):
+    if not os.path.isdir('%s/models_best/%s'%(save_loc,start_date)):
         try:
-            os.makedirs('%s/models_cnn/%s'%(save_loc,start_date))
+            os.makedirs('%s/models_best/%s'%(save_loc,start_date))
         except OSError:
-            if not os.path.isdir('%s/models_cnn/%s'%(save_loc,start_date)):
+            if not os.path.isdir('%s/models_best/%s'%(save_loc,start_date)):
                 raise
     
     sess = tf.InteractiveSession()
@@ -366,9 +372,13 @@ def evaluate_rnn_model_from_file(data_folder, model_file):
 
         
 def evaluate_rnn(data_folder, y):
+    # For evaluation, we run the same loop as in training, 
+    # without optimization. The batch size remains the same, because a higher
+    # batch size would lead to less sentences being evaluated
 
     r = tf.argmax(y,1)
-    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl', data_folder + '/test_name.pkl', batch_size=1)  
+    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl', data_folder + '/test_name.pkl', batch_size=1)
+    # Create arrays that will contain evaluation metrics per sentence    
     phones_pred = []
     phones_true = []
     frame_accuracies = []
@@ -382,7 +392,6 @@ def evaluate_rnn(data_folder, y):
     
     f = open('out.csv', 'w')
     f.write('id,phone_sequence\n')
-
     while not end_of_test:
 
             batch_data, seq_len, name_list = test_set.next_test_batch(train_batch_size, _pad=contex)
@@ -390,7 +399,8 @@ def evaluate_rnn(data_folder, y):
             if batch_data is None:
                 end_of_test = True
                 break
-
+            # Reset the LSTM State for the sequences that ended, 
+            # otherwise use the previous state
             feed_dict = {
                 x: batch_data,
                 sequence_len: seq_len,
@@ -406,17 +416,17 @@ def evaluate_rnn(data_folder, y):
             mapped_result = [phone_list[i] for i in result[0]]
             #print(mapped_result)
 
-            # for i in range(1,len(mapped_result)-1):
-            #     if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
-            #         print(mapped_result[i-10 : i+10])
-            #         print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
-            #         mapped_result[i] = mapped_result[i-1]
-            #         continue
+            for i in range(1,len(mapped_result)-1):
+                if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
+                    print(mapped_result[i-10 : i+10])
+                    print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
+                    mapped_result[i] = mapped_result[i-1]
+                    continue
 
-            #     if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
-            #         print(mapped_result[i-10 : i+10])
-            #         print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
-            #         mapped_result[i] = mapped_result[i-1]
+                if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
+                    print(mapped_result[i-10 : i+10])
+                    print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
+                    mapped_result[i] = mapped_result[i-1]
 
             phone39_result = [phone_map[i] for i in mapped_result]
             mapped_char_result = [phone_char_map[i] for i in phone39_result]
