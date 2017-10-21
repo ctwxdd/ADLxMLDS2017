@@ -17,12 +17,12 @@ NUM_CLASSES = 48
 ### Parameters (overidden by argparse, default values listed here)
 num_epochs = 15
 train_batch_size = 64
-num_hidden = 96
-num_lstm_layers = 1
+num_hidden = 64
+num_lstm_layers = 4
 use_dropout = True
 optimizer_name='Adam'
 learn_rate = 0.001
-contex = 0
+contex = 2
 
 ### Internal variables
 num_features = 39
@@ -59,7 +59,7 @@ def maskcost(output, target):
     cross_entropy = tf.reduce_sum(cross_entropy, 1)
     cross_entropy /= tf.reduce_sum(mask, 1)
 
-    return tf.reduce_mean(cross_entropy)
+    return tf.reduce_mean(cross_entropy, 0)
 
 def mask_accuracy(output, target):
 
@@ -67,23 +67,30 @@ def mask_accuracy(output, target):
     #mask = tf.Print(mask, [mask], summarize=500 )
     correct_prediction = tf.cast(tf.equal(tf.argmax(output, 2), tf.argmax(target, 2)), tf.float32)
     correct_prediction *= mask
+    #correct_prediction = tf.Print(correct_prediction, [correct_prediction], summarize=500 )
     correct_prediction = tf.reduce_sum(correct_prediction, 1)
-    correct_prediction /= tf.reduce_sum(mask, 1)
+    mask = tf.reduce_sum(mask, 1)
+    return tf.reduce_mean(correct_prediction / mask)
 
-    return tf.reduce_mean(correct_prediction)
 
 def BiRNN(X):
 
-    X = tf.contrib.layers.batch_norm(X)
+    #X = tf.contrib.layers.batch_norm(X)
 
-    # with tf.name_scope("conv_1"):
-    #     X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
-    #     W_conv1 = weight_variable([3, 1, 1, 16])
-    #     b_conv1 = bias_variable([16])
-    #     X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
-    #     #X = tf.Print(X, [tf.shape(X)])
+    with tf.name_scope("conv_1"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        W_conv1 = weight_variable([3, 1, 1, 16])
+        b_conv1 = bias_variable([16])
+        X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
+    
+    with tf.name_scope("conv_2"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 16])
+        W_conv2 = weight_variable([3, 1, 16, 1])
+        b_conv2 = bias_variable([1])
+        X = tf.nn.relu(conv2d(X, W_conv2) + b_conv2)
+        X = tf.reshape(X, [train_batch_size, -1, num_features])
+
         
-
     with tf.name_scope("inlayer"):
 
         X = tf.reshape(X, [-1, num_features])
@@ -91,35 +98,39 @@ def BiRNN(X):
         b_inlayer = bias_variable([num_hidden])
 
         X_in = tf.matmul(X, W_inlayer) + b_inlayer
-        X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
+
+        output = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
         #lstm modules
+
         fw_cell = []
         bw_cell = []
         
         for n in range(num_lstm_layers):
+            fw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))    
+            bw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))
 
-            fw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden))    
-            bw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden))
+        for n in range(num_lstm_layers):
 
-        lstm_fw_cell = tf.contrib.rnn.MultiRNNCell(fw_cell, state_is_tuple=True)
-        lstm_bw_cell = tf.contrib.rnn.MultiRNNCell(bw_cell, state_is_tuple=True)
+            cell_fw = fw_cell[n]
+            cell_bw = bw_cell[n]
 
-        fw_state = lstm_fw_cell.zero_state(train_batch_size, dtype=tf.float32)
-        bw_state = lstm_bw_cell.zero_state(train_batch_size, dtype=tf.float32)
-        
-        #lstm_fw_celll = tf.nn.rnn_cell.DropoutWrapper(lstm_fw_cell, input_keep_prob=keep_prob)
-        #lstm_bw_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_bw_cell, input_keep_prob=keep_prob)
+            state_fw = cell_fw.zero_state(train_batch_size, tf.float32)
+            state_bw = cell_bw.zero_state(train_batch_size, tf.float32)
 
-        raw_rnn_out, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, X_in,
-                                                sequence_length=sequence_len, initial_state_fw=fw_state, initial_state_bw=bw_state, dtype=tf.float32)
-        fw_rnn_out, bw_rnn_out = raw_rnn_out
-        rnn_out= tf.concat([fw_rnn_out, bw_rnn_out], 2)
-        rnn_out = tf.reshape(rnn_out,[-1, num_hidden * 2])
+            (output_fw, output_bw), last_state = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, output,
+                                                                                initial_state_fw=state_fw,
+                                                                                initial_state_bw=state_bw,
+                                                                                scope='BLSTM_'+ str(n),
+                                                                                dtype=tf.float32)
+
+            output = tf.concat([output_fw, output_bw], axis=2)
+
+        output = tf.reshape(output, [-1, 2 * num_hidden])
 
         #output layer
         W_outlayer = weight_variable([num_hidden * 2, num_classes])
         b_outlayer = bias_variable([num_classes])
-        results = tf.matmul(rnn_out, W_outlayer) + b_outlayer
+        results = tf.matmul(output, W_outlayer) + b_outlayer
 
         results = tf.reshape(results, [train_batch_size, -1, num_classes])
     
@@ -139,6 +150,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
         batch = 0
         while not epoch_done:
+
             batch += 1
             batch_data, batch_labels, seq_len = train_set.next_batch(train_batch_size, _pad=contex)
             
@@ -146,6 +158,7 @@ def train(train_set, eval_set, y, cost, optimizer):
                 # Epoch is finished
                 epoch_done = True
                 break
+
             feed_dict = {
                 x: batch_data,
                 y_: batch_labels,
@@ -200,8 +213,6 @@ def train(train_set, eval_set, y, cost, optimizer):
             if batch_data is None:
                 end_of_cross_val = True
                 break
-            # Reset the LSTM State for the sequences that ended, 
-            # otherwise use the previous state
 
             feed_dict = {
                 x: batch_data,
@@ -225,7 +236,6 @@ def train(train_set, eval_set, y, cost, optimizer):
 
     
 def train_rnn(data_folder, model_file = None):
-    #y = RNN_CNN(x)
     y = BiRNN(x)
     print("Loading training pickles..")   
 
@@ -248,8 +258,8 @@ def train_rnn(data_folder, model_file = None):
                 raise
 
     cost = maskcost(y, y_)
-    #optimizer = tf.train.AdamOptimizer(learning_rate = learn_rate).minimize(cost)
-    optimizer = tf.train.RMSPropOptimizer(0.001).minimize(cost)
+    optimizer = tf.train.AdamOptimizer(learning_rate = learn_rate).minimize(cost)
+    #optimizer = tf.train.RMSPropOptimizer(0.001).minimize(cost)
 
     init = tf.global_variables_initializer()
 
@@ -336,7 +346,7 @@ def evaluate_rnn(data_folder, y):
         mapped_char_result = [phone_char_map[i] for i in phone39_result]
         #print(mapped_char_result)
         result_str = remove_duplicate(mapped_char_result)
-        print('%s,%s' % (name_list[0], result_str))
+        #print('%s,%s' % (name_list[0], result_str))
         f.write('%s,%s\n' % (name_list[0], result_str))
 
 

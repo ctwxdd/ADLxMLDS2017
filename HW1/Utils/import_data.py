@@ -63,6 +63,8 @@ class DataSet(object):
         self._epochs_completed = 0
         self._index_in_epoch = 0
         self._num_examples = data.shape[0]
+        print(data.shape)
+        print(labels.shape)
         # required for next_sequence_batch
         self._batch_size = batch_size
         
@@ -126,11 +128,12 @@ class DataSet(object):
         for s in self._data[start:end]:
             sl = s.shape[0]
             seq_len.append(sl)
-            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'constant' , constant_values=(0)))
+            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'edge'))
         
         for s in self._labels[start:end]:
             sl = s.shape[0]
             batch_label.append(np.lib.pad(s, ((0,max_seq_len-sl),(0,0)), 'constant' , constant_values=(0)))
+        
 
         return np.array(batch_data), np.array(batch_label), seq_len
 
@@ -159,6 +162,6 @@ class DataSet(object):
         for s in self._data[start:end]:
             sl = s.shape[0]
             seq_len.append(sl)
-            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'constant' , constant_values=(0)))
+            batch_data.append(np.lib.pad(s, ((p,max_seq_len-sl+p),(0,0)), 'edge'))
 
         return np.array(batch_data), seq_len, self._name_list[start:end]

@@ -11,7 +11,7 @@ def normalize_mfcc(mfcc):
             An ndarray containing mfcc data.
             Its shape is [sentence_length, coefficients]
     
-    Returns:
+    Returnso
         numpy.ndarray:
             An ndarray containing normalized mfcc data with the same shape as
             the input.

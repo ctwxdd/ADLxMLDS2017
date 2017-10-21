@@ -21,8 +21,8 @@ num_hidden = 64
 num_lstm_layers = 3
 use_dropout = True
 optimizer_name='Adam'
-learn_rate = 0.001
-contex = 0
+learn_rate = 0.0001
+contex = 1
 keep_p = 0.75
 
 ### Internal variables
@@ -73,7 +73,53 @@ def mask_accuracy(output, target):
 
     return tf.reduce_mean(correct_prediction)
 
+
 def BiRNN(X):
+
+    X = tf.contrib.layers.batch_norm(X)
+
+
+    with tf.name_scope("conv_1"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        W_conv1 = weight_variable([3, 1, 1, 16])
+        b_conv1 = bias_variable([16])
+        X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
+        #X = tf.Print(X, [tf.shape(X)])
+        
+    with tf.name_scope("inlayer"):
+
+        X = tf.reshape(X, [-1, num_features])
+        W_inlayer = weight_variable([num_features, num_hidden])
+        b_inlayer = bias_variable([num_hidden])
+
+        X_in = tf.matmul(X, W_inlayer) + b_inlayer
+        X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
+        #lstm modules
+
+        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+
+        fw_state = lstm_fw_cell.zero_state(train_batch_size, dtype=tf.float32)
+        bw_state = lstm_bw_cell.zero_state(train_batch_size, dtype=tf.float32)
+        
+
+        raw_rnn_out, _ = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, X_in,
+                                                sequence_length=sequence_len, initial_state_fw=fw_state, initial_state_bw=bw_state, dtype=tf.float32)
+        rnn_out= tf.concat(raw_rnn_out, 2)
+        rnn_out = tf.reshape(rnn_out,[-1, num_hidden * 2])
+
+        #output layer
+        W_outlayer = weight_variable([num_hidden * 2, num_classes])
+        b_outlayer = bias_variable([num_classes])
+        results = tf.matmul(rnn_out, W_outlayer) + b_outlayer
+
+        results = tf.reshape(results, [train_batch_size, -1, num_classes])
+    
+    print("Model creation done")
+    
+    return results
+
+def BiRNN2(X):
 
     X = tf.contrib.layers.batch_norm(X)
 

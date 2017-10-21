@@ -208,6 +208,8 @@ def train(train_set, eval_set, y, cost, optimizer):
                 # Epoch is finished
                 epoch_done = True
                 break
+            print(batch.shape)
+            print(batch_labels.shape)
             
             # Reset the LSTM State for the sequences that ended, 
             # otherwise use the previous state
