@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.npy
 
 # C extensions
 *.so
@@ -113,3 +114,4 @@ ENV/
 /HW1/output/*
 
 
+HW1/data/test_data.npy
