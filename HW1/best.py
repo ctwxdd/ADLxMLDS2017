@@ -11,14 +11,15 @@ from Utils import layers
 from Utils import map_reader
 from tensorflow.contrib.rnn import BasicLSTMCell
 
-data_folder = './data/mfcc_data'
+data_folder = './data/mfcc'
 NUM_CLASSES = 48
 
 ### Parameters (overidden by argparse, default values listed here)
+model_name = ''
 num_epochs = 15
 train_batch_size = 64
 num_hidden = 64
-num_lstm_layers = 4
+num_lstm_layers = 6
 use_dropout = True
 optimizer_name='Adam'
 learn_rate = 0.001
@@ -75,7 +76,7 @@ def mask_accuracy(output, target):
 
 def BiRNN(X):
 
-    #X = tf.contrib.layers.batch_norm(X)
+    X = tf.contrib.layers.batch_norm(X)
 
     with tf.name_scope("conv_1"):
         X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
@@ -240,7 +241,7 @@ def train_rnn(data_folder, model_file = None):
     print("Loading training pickles..")   
 
     train_set, eval_set = import_data.load_dataset(data_folder + '/train_data.pkl', 
-                                         data_folder + '/train_mapped_label.pkl',
+                                         data_folder + '/train_label.pkl',
                                          batch_size=train_batch_size)
     print("Loading done")
     
@@ -330,17 +331,17 @@ def evaluate_rnn(data_folder, y):
 
         #print(mapped_result)
 
-        # for i in range(1,len(mapped_result)-1):
-        #     if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
-        #         print(mapped_result[i-10 : i+10])
-        #         print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
-        #         mapped_result[i] = mapped_result[i-1]
-        #         continue
+        for i in range(1,len(mapped_result)-1):
+            if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
+                print(mapped_result[i-10 : i+10])
+                print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
+                mapped_result[i] = mapped_result[i-1]
+                continue
 
-        #     if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
-        #         print(mapped_result[i-10 : i+10])
-        #         print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
-        #         mapped_result[i] = mapped_result[i-1]
+            if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
+                print(mapped_result[i-10 : i+10])
+                print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
+                mapped_result[i] = mapped_result[i-1]
 
         phone39_result = [phone_map[i] for i in mapped_result]
         mapped_char_result = [phone_char_map[i] for i in phone39_result]

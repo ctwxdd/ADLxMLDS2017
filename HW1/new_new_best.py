@@ -21,15 +21,16 @@ data_folder = './data/mfcc'
 ### Parameters
 NUM_CLASSES = 48
 
-model_name = 'rnn'
+model_name = '2cnn_6biRnn_do_bn'
+logdir = './tmp/' + model_name 
 num_epochs = 15
 train_batch_size = 64
-num_hidden = 64
-num_lstm_layers = 1
+num_hidden = 96
+num_lstm_layers = 8
 use_dropout = True
 optimizer_name='Adam'
 learn_rate = 0.001
-contex = 0
+contex = 3
 
 ### Internal variables
 num_features = 39
@@ -45,37 +46,74 @@ keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 ### Ops
 sess = None
 saver = None
+merged = None
+train_writer = None
 
-def RNN(X):
+
+def BiRNN(X):
+
+    X = tf.contrib.layers.batch_norm(X)
+
+    with tf.name_scope("conv_1"):
+
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 1])
+        W_conv1 = weight_variable([5, 1, 1, 32])
+        b_conv1 = bias_variable([32])
+        X = tf.nn.relu(conv2d(X, W_conv1) + b_conv1)
+    
+    with tf.name_scope("conv_2"):
+        X = tf.reshape(X, [train_batch_size, -1, num_features, 32])
+        W_conv2 = weight_variable([3, 1, 32, 1])
+        b_conv2 = bias_variable([1])
+        X = tf.nn.relu(conv2d(X, W_conv2) + b_conv2)
+        X = tf.reshape(X, [train_batch_size, -1, num_features])
+    
 
     with tf.name_scope("inlayer"):
 
         X = tf.reshape(X, [-1, num_features])
         W_inlayer = weight_variable([num_features, num_hidden])
         b_inlayer = bias_variable([num_hidden])
+
         X_in = tf.matmul(X, W_inlayer) + b_inlayer
 
-        X_in = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
+        output = tf.reshape(X_in, [train_batch_size, -1, num_hidden])
+        #lstm modules
 
-    with tf.name_scope("RNN_CELL"):
+        fw_cell = []
+        bw_cell = []
+        
+        for n in range(num_lstm_layers):
+            fw_cell.append(tf.contrib.rnn.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0), keep_prob))   
+            bw_cell.append(tf.contrib.rnn.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0), keep_prob))
 
-        cells = []
+        #if not dropout
+        # for n in range(num_lstm_layers):
+        #     fw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))    
+        #     bw_cell.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0))
 
         for n in range(num_lstm_layers):
-            cells.append(tf.contrib.rnn.BasicLSTMCell(num_hidden, state_is_tuple=True))
 
-        lstm_cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=True)
+            cell_fw = fw_cell[n]
+            cell_bw = bw_cell[n]
 
-        lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell,input_keep_prob=keep_prob)
-        rnn_out, states = tf.nn.dynamic_rnn(lstm_cell, X_in, sequence_length=sequence_len, dtype=tf.float32)
+            state_fw = cell_fw.zero_state(train_batch_size, tf.float32)
+            state_bw = cell_bw.zero_state(train_batch_size, tf.float32)
 
-    with tf.name_scope("out_layer"):
-        
-        rnn_out = tf.reshape(rnn_out, [-1, num_hidden])
-        W_outlayer = weight_variable([num_hidden, num_classes])
+            (output_fw, output_bw), last_state = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, output,
+                                                                                initial_state_fw=state_fw,
+                                                                                initial_state_bw=state_bw,
+                                                                                scope='BLSTM_'+ str(n),
+                                                                                dtype=tf.float32)
+
+            output = tf.concat([output_fw, output_bw], axis=2)
+
+        output = tf.reshape(output, [-1, 2 * num_hidden])
+
+        #output layer
+        W_outlayer = weight_variable([num_hidden * 2, num_classes])
         b_outlayer = bias_variable([num_classes])
-
-        results = tf.matmul(rnn_out, W_outlayer) + b_outlayer
+        results = tf.matmul(output, W_outlayer) + b_outlayer
 
         results = tf.reshape(results, [train_batch_size, -1, num_classes])
     
@@ -83,10 +121,31 @@ def RNN(X):
     
     return results
 
+
+def variable_summaries(var):
+
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
+
+
 def train(train_set, eval_set, y, cost, optimizer):
+
+
+    global merged
 
     with tf.name_scope('accuracy'):
         accuracy = mask_accuracy(y, y_)
+        tf.summary.scalar('accuracy', accuracy)
+
+    merged = tf.summary.merge_all()
     
     for epoch in range(num_epochs):
         print("epoch %d:" % epoch)
@@ -107,14 +166,16 @@ def train(train_set, eval_set, y, cost, optimizer):
                 x: batch_data,
                 y_: batch_labels,
                 sequence_len: seq_len,
-                keep_prob: 0.75
+                keep_prob: 1.0
             }                        
             
-            if batch%50 == 0:
-                train_accuracy = sess.run([ accuracy],feed_dict=feed_dict)  
-                print("epoch %d, batch %d, training accuracy %g"%(epoch, batch, train_accuracy[0]))
+            if batch%20 == 0:
 
-            feed_dict[keep_prob] = 0.8
+                summary, train_accuracy = sess.run([merged, accuracy],feed_dict=feed_dict)  
+                print("epoch %d, batch %d, training accuracy %g"%(epoch, batch, train_accuracy))               
+                train_writer.add_summary(summary, (epoch * 3696 / train_batch_size) + batch)
+
+            feed_dict[keep_prob] = 0.5
             
             c_e, _ = sess.run([cost, optimizer], feed_dict=feed_dict)
 
@@ -149,9 +210,10 @@ def train(train_set, eval_set, y, cost, optimizer):
         train_set.reset_epoch(train_batch_size)
         end_of_cross_val = False
         accuracies_val = []
+        idx = 0
 
         while not end_of_cross_val:
-
+            idx+=1
             batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=contex)
 
             if batch_data is None:
@@ -164,7 +226,6 @@ def train(train_set, eval_set, y, cost, optimizer):
                 sequence_len: seq_len,
                 keep_prob: 1.0
             }
-            
             acc = sess.run([accuracy], feed_dict=feed_dict)
             accuracies_val.append(acc)
 
@@ -180,7 +241,7 @@ def train(train_set, eval_set, y, cost, optimizer):
 
     
 def train_rnn(data_folder, model_file = None):
-    y = RNN(x)
+    y = BiRNN(x)
     print("Loading training pickles..")   
 
     train_set, eval_set = import_data.load_dataset(data_folder + '/train_data.pkl', 
@@ -191,6 +252,8 @@ def train_rnn(data_folder, model_file = None):
     global sess
     global train_writer
     global saver
+    global merged
+
     saver = tf.train.Saver()
 
     # Create the dir for the model
@@ -200,19 +263,29 @@ def train_rnn(data_folder, model_file = None):
         except OSError:
             if not os.path.isdir('%s/%s/%s'%(save_loc, model_name, start_date)):
                 raise
-
+ 
     cost = maskcost(y, y_)
+
+    tf.summary.scalar('cross_entropy', cost)
 
     if optimizer_name == 'Adam':
         optimizer = tf.train.AdamOptimizer(learning_rate = learn_rate).minimize(cost)
     elif optimizer_name == 'RmsProp':
         optimizer = tf.train.RMSPropOptimizer(learn_rate).minimize(cost)
+    
+    
+
+
+    
 
     init = tf.global_variables_initializer()
 
     with tf.Session() as sess:
 
         sess.run(init)
+
+        train_writer = tf.summary.FileWriter(logdir, sess.graph)
+        #test_writer = tf.summary.FileWriter(logdir)
     
         if model_file:
             saver.restore(sess, model_file)
@@ -228,7 +301,7 @@ def train_rnn(data_folder, model_file = None):
     
 def evaluate_rnn_model_from_file(data_folder, model_file):
     #Load the CNN_RNN graph
-    y = RNN(x)
+    y = BiRNN(x)
 
     saver = tf.train.Saver()
     global sess

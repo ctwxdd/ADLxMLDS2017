@@ -63,8 +63,6 @@ class DataSet(object):
         self._epochs_completed = 0
         self._index_in_epoch = 0
         self._num_examples = data.shape[0]
-        print(data.shape)
-        print(labels.shape)
         # required for next_sequence_batch
         self._batch_size = batch_size
         

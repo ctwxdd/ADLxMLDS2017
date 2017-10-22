@@ -37,3 +37,33 @@ def _enumerate_context(i, sentence, num_frames):
     r = [x if x>=0 else 0 for x in r]
     r = [x if x<len(sentence) else len(sentence)-1 for x in r]
     return sentence[r]
+
+def removeNoise(mapped_result):
+
+    for i in range(1,len(mapped_result)-1):
+            """reomve aaaaabaaaa noise"""
+            if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
+                print(mapped_result[i-10 : i+10])
+                print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
+                mapped_result[i] = mapped_result[i-1]
+                continue
+            """remove aaaaaabcccccc noise"""
+            # if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
+            #     print(mapped_result[i-10 : i+10])
+            #     print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
+
+            #     mapped_result[i] = mapped_result[i-1]
+
+    return mapped_result
+
+
+
+def remove_duplicate(raw_list):
+    rst = []
+    current = 'L'
+    for i in raw_list:
+        if i != current:
+            rst.append(i)
+            current = i
+    result = ''.join(rst).strip('L')
+    return result
