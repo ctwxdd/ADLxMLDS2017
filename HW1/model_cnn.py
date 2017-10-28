@@ -14,16 +14,17 @@ from tensorflow.contrib.rnn import BasicLSTMCell
 
 #choose which data to use
 
-data_folder = './data/mfcc'
+#data_folder = './data/mfcc'
 #data_folder = './data/fbank'
-#data_folder = './data'
+data_folder = './data'
 
 ### Parameters
 NUM_CLASSES = 48
 
-model_name = 'crnn'
+model_name = 'cnn_rnn'
+logdir = './tmp/' + model_name
 num_epochs = 15
-train_batch_size = 64
+train_batch_size = 128
 num_hidden = 64
 num_lstm_layers = 1
 use_dropout = True
@@ -32,7 +33,7 @@ learn_rate = 0.001
 contex = 1
 
 ### Internal variables
-num_features = 39
+num_features = 108
 num_classes = 48
 start_date = time.strftime("%d-%m-%y/%H.%M.%S")
 save_loc = "./output"
@@ -93,8 +94,14 @@ def CRNN(X):
 
 def train(train_set, eval_set, y, cost, optimizer):
 
+
+    global merged
+
     with tf.name_scope('accuracy'):
         accuracy = mask_accuracy(y, y_)
+        tf.summary.scalar('accuracy', accuracy)
+
+    merged = tf.summary.merge_all()
     
     for epoch in range(num_epochs):
         print("epoch %d:" % epoch)
@@ -115,18 +122,20 @@ def train(train_set, eval_set, y, cost, optimizer):
                 x: batch_data,
                 y_: batch_labels,
                 sequence_len: seq_len,
-                keep_prob: 0.75
+                keep_prob: 1.0
             }                        
             
-            if batch%50 == 0:
-                train_accuracy = sess.run([ accuracy],feed_dict=feed_dict)  
-                print("epoch %d, batch %d, training accuracy %g"%(epoch, batch, train_accuracy[0]))
+            if batch%100 == 0:
 
-            feed_dict[keep_prob] = 0.8
+                summary, train_accuracy = sess.run([merged, accuracy],feed_dict=feed_dict)  
+                print("epoch %d, batch %d, training accuracy %g"%(epoch, batch, train_accuracy))               
+                train_writer.add_summary(summary, (epoch * 3696 / train_batch_size) + batch)
+
+            feed_dict[keep_prob] = 0.5
             
             c_e, _ = sess.run([cost, optimizer], feed_dict=feed_dict)
 
-            if batch%50 == 0:
+            if batch%100 == 0:
                 print("cross entropy: %g"%c_e)
 
         num_examples = train_set.data.shape[0]
@@ -157,9 +166,10 @@ def train(train_set, eval_set, y, cost, optimizer):
         train_set.reset_epoch(train_batch_size)
         end_of_cross_val = False
         accuracies_val = []
+        idx = 0
 
         while not end_of_cross_val:
-
+            idx+=1
             batch_data, batch_labels, seq_len = eval_set.next_batch(train_batch_size, _pad=contex)
 
             if batch_data is None:
@@ -172,7 +182,6 @@ def train(train_set, eval_set, y, cost, optimizer):
                 sequence_len: seq_len,
                 keep_prob: 1.0
             }
-            
             acc = sess.run([accuracy], feed_dict=feed_dict)
             accuracies_val.append(acc)
 
@@ -199,6 +208,8 @@ def train_rnn(data_folder, model_file = None):
     global sess
     global train_writer
     global saver
+    global merged
+
     saver = tf.train.Saver()
 
     # Create the dir for the model
@@ -208,19 +219,24 @@ def train_rnn(data_folder, model_file = None):
         except OSError:
             if not os.path.isdir('%s/%s/%s'%(save_loc, model_name, start_date)):
                 raise
-
+ 
     cost = maskcost(y, y_)
+
+    tf.summary.scalar('cross_entropy', cost)
 
     if optimizer_name == 'Adam':
         optimizer = tf.train.AdamOptimizer(learning_rate = learn_rate).minimize(cost)
     elif optimizer_name == 'RmsProp':
         optimizer = tf.train.RMSPropOptimizer(learn_rate).minimize(cost)
-
+    
     init = tf.global_variables_initializer()
 
     with tf.Session() as sess:
 
         sess.run(init)
+
+        train_writer = tf.summary.FileWriter(logdir, sess.graph)
+        #test_writer = tf.summary.FileWriter(logdir)
     
         if model_file:
             saver.restore(sess, model_file)
@@ -259,12 +275,12 @@ def evaluate_rnn(data_folder, y):
 
     end_of_test = False
 
-    f = open('out.csv', 'w')
+    f = open(csv_file_name, 'w')
     f.write('id,phone_sequence\n')
 
     while not end_of_test:
 
-        batch_data, seq_len, name_list = test_set.next_test_batch(1, _pad=contex)
+        batch_data, seq_len, name_list = test_set.next_test_batch(16, _pad=contex)
 
         if batch_data is None:
             end_of_test = True
@@ -276,15 +292,16 @@ def evaluate_rnn(data_folder, y):
             keep_prob: 1.0
         }
         
-        result = sess.run([r], feed_dict=feed_dict)[0]
-        mapped_result = [phone_list[i] for i in result[0]]
-        mapped_result = removeNoise(mapped_result)
+        results = sess.run([r], feed_dict=feed_dict)[0]
 
-        phone39_result = [phone_map[i] for i in mapped_result]
-        mapped_char_result = [phone_char_map[i] for i in phone39_result]
-        result_str = remove_duplicate(mapped_char_result)
+        for result, l, name in zip(results, seq_len, name_list):
 
-        f.write('%s,%s\n' % (name_list[0], result_str))
+            mapped_result = [phone_list[i] for i in result[:l]]
+            mapped_result = removeNoise(mapped_result)
+            phone39_result = [phone_map[i] for i in mapped_result]
+            mapped_char_result = [phone_char_map[i] for i in phone39_result]
+            result_str = remove_duplicate(mapped_char_result)
+            f.write('%s,%s\n' % (name, result_str))
 
 if __name__ == "__main__":
 
@@ -294,8 +311,10 @@ if __name__ == "__main__":
     ap.add_argument('-b', '--batch_size', type=int, help='Size of each minibatch')
     ap.add_argument('-m', '--model', type=str, help='.ckpt file of the model. If -t option is used, evaluate this model. Otherwise, train it.')
     ap.add_argument('-n', '--num_hidden_layers', type=int, help='Number of hidden LSTM layers')
-    ap.add_argument('-o', '--optimizer', type=str, help='Optimizer. Either "Adam" or "RmsProp"')
     ap.add_argument('-t', '--test', action='store_true', help='Evaluate a given model.')
+    ap.add_argument('-d', '--datadir', type=str, help='data dir')
+    ap.add_argument('-o', '--output', type=str, help='output filename')
+
 
     ap.set_defaults(epochs = num_epochs,
                     batch_size = train_batch_size, 
@@ -313,6 +332,13 @@ if __name__ == "__main__":
     train_batch_size = args.batch_size    
     num_hidden = args.size_hidden
     num_lstm_layers = args.num_hidden_layers
+
+
+    data_folder = args.datadir
+    csv_file_name = args.output
+
+    #data_folder = data_folder + 'fbank'
+    #data_folder = data_folder + 'mfcc'
     
     if args.test:
 
@@ -321,5 +347,7 @@ if __name__ == "__main__":
 
     else:
         train_rnn(data_folder, args.model)
+
+
 
 

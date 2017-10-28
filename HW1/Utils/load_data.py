@@ -2,6 +2,9 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
+import preprocessing as pp
+import sys
+
 
 def ark_parser(ark_path, filename):
     df = pd.read_csv(os.path.join(ark_path, filename), header=None, delimiter=' ')
@@ -61,7 +64,7 @@ def convert_testing_data(mfccPath):
     with open(mfccPath +'/test_name.pkl', 'wb') as test_name:
         pickle.dump(inputnamelist, test_name)
 
-def convert_all_test_data(mfccPath, fbankPath):
+def convert_all_test_data(mfccPath, fbankPath, datadir):
 
     """convert training data to pkl file"""
     inputmfcc, inputnamemfcc = ark_parser(mfccPath, 'test.ark')
@@ -72,10 +75,15 @@ def convert_all_test_data(mfccPath, fbankPath):
     assert len(inputnamemfcc) == len(inputnamefbank)
 
     for fb, mfcc in zip(inputfbank, inputmfcc):
+        fb = pp.normalize_mfcc(fb)
+        mfcc = pp.normalize_mfcc(mfcc)
         inputlist.append(np.concatenate((fb, mfcc), axis=1))
 
-    with open('../data/test_data.pkl', 'wb') as test_data:
+    with open(datadir + 'test_data.pkl', 'wb') as test_data:
         pickle.dump(inputlist, test_data)
+
+    with open(datadir + 'test_name.pkl', 'wb') as test_name:
+        pickle.dump(inputnamefbank, test_name)
 
 def convert_data(DataPath, labeldict):
     """convert training data to pkl file"""
@@ -88,13 +96,13 @@ def convert_data(DataPath, labeldict):
     for name in inputnamelist:
         label.append(labeldict[name])
 
-    convert_label_to_int(DataPath, '../data/48phone_char.map', label)
+    convert_label_to_int(DataPath, '/48phone_char.map', label)
 
     with open(DataPath + '/train_data.pkl', 'wb') as train_data:
         pickle.dump(inputlist, train_data)
 
 
-def convert_all_data(mfccPath, fbankPath, labeldict):
+def convert_all_data(mfccPath, fbankPath, labeldict, datadir):
     """convert training data to pkl file"""
 
     inputmfcc, inputnamemfcc = ark_parser(mfccPath, 'train.ark')
@@ -105,15 +113,17 @@ def convert_all_data(mfccPath, fbankPath, labeldict):
     assert len(inputnamemfcc) == len(labeldict.keys()) and len(inputnamefbank) == len(labeldict.keys())
 
     for fb, mfcc in zip(inputfbank, inputmfcc):
+        fb = pp.normalize_mfcc(fb)
+        mfcc = pp.normalize_mfcc(mfcc)
         inputlist.append(np.concatenate((fb, mfcc), axis=1))
 
     for name in inputnamemfcc:
         label.append(labeldict[name])
 
-    with open('../data/train_data.pkl', 'wb') as train_data:
+    with open(datadir + 'train_data.pkl', 'wb') as train_data:
         pickle.dump(inputlist, train_data)
 
-    convert_label_to_int('../data', '../data/48phone_char.map', label)
+    convert_label_to_int(datadir, datadir + '48phone_char.map', label)
 
 def convert_label_to_int(DataPath, path_to_phone_char_map, label):
 
@@ -144,24 +154,26 @@ def phone_int_mapping(path_to_phone_char_map):
 
 def main():
 
-    data_source = 'mfcc' # mfcc or fbank
-    data_path = '../data/' +  data_source
-    label_path = '../data/label'
-    path_to_phone_char_map = '../data/48phone_char.map'
-    mfcc_path =  '../data/mfcc'
-    fbank_path = '../data/fbank'
+    print('Loading Data mfcc + fbank...')
+    datadir = sys.argv[1]
+    label_path =  datadir  + 'label'
+    path_to_phone_char_map = datadir + '48phone_char.map'
+    mfcc_path =  datadir + 'mfcc'
+    fbank_path = datadir + 'fbank'
 
 
     labeldict = lab_parser(label_path)
     
-    convert_data(mfcc_path, labeldict)
-    convert_data(fbank_path, labeldict)
+    # convert_data(mfcc_path, labeldict)
+    # convert_data(fbank_path, labeldict)
 
-    convert_testing_data(mfcc_path)
-    convert_testing_data(fbank_path)
+    # convert_testing_data(mfcc_path)
+    # convert_testing_data(fbank_path)
 
-    convert_all_data(mfcc_path, fbank_path, labeldict)
-    convert_all_test_data(mfcc_path, fbank_path)
+    convert_all_data(mfcc_path, fbank_path, labeldict, datadir)
+    convert_all_test_data(mfcc_path, fbank_path, datadir)
+
+    print('Done Loading Data mfcc + fbank...')
 
 
 if __name__ == "__main__":

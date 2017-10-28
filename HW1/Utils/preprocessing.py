@@ -43,20 +43,37 @@ def removeNoise(mapped_result):
     for i in range(1,len(mapped_result)-1):
             """reomve aaaaabaaaa noise"""
             if (mapped_result[i] != mapped_result[i-1] and mapped_result[i-1] == mapped_result[i+1]):
-                print(mapped_result[i-10 : i+10])
-                print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
+                #print(mapped_result[i-10 : i+10])
+                #print('%s to %s' % (mapped_result[i] , mapped_result[i-1]))
                 mapped_result[i] = mapped_result[i-1]
                 continue
             """remove aaaaaabcccccc noise"""
-            # if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
-            #     print(mapped_result[i-10 : i+10])
-            #     print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
+            if (mapped_result[i+1] != mapped_result[i-1] and mapped_result[i] != mapped_result[i+1] and mapped_result[i] != mapped_result[i-1]):
+                #print(mapped_result[i-10 : i+10])
+                #print('%s tooo %s' % (mapped_result[i] , mapped_result[i-1]))
 
-            #     mapped_result[i] = mapped_result[i-1]
+                mapped_result[i] = mapped_result[i-1]
 
     return mapped_result
 
+def genseq(mapped_result):
 
+    seq = []
+    curr = ''
+    cnt = 0
+    for i in mapped_result:
+        if i != curr and cnt >2:
+            seq.append(curr)
+            curr = i
+            cnt = 1
+
+        elif i != curr:
+            curr = i
+            cnt = 1
+        else:
+            cnt+=1
+
+    return seq
 
 def remove_duplicate(raw_list):
     rst = []

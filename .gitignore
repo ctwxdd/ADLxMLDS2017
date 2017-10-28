@@ -111,7 +111,6 @@ ENV/
 #output file
 /HW1/out*
 /HW1/tmp*
-/HW1/model
 #model file
 /HW1/output/*
 
