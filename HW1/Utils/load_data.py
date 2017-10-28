@@ -58,10 +58,10 @@ def convert_testing_data(mfccPath):
     inputlist, inputnamelist = ark_parser(mfccPath, 'test.ark')
 
     print("%d sample in testing set" % len(inputlist))
-    with open(mfccPath + '/test_data.pkl', 'wb') as test_data:
+    with open('./test_data.pkl', 'wb') as test_data:
         pickle.dump(inputlist, test_data)
         
-    with open(mfccPath +'/test_name.pkl', 'wb') as test_name:
+    with open('./test_name.pkl', 'wb') as test_name:
         pickle.dump(inputnamelist, test_name)
 
 def convert_all_test_data(mfccPath, fbankPath, datadir):
@@ -79,10 +79,10 @@ def convert_all_test_data(mfccPath, fbankPath, datadir):
         mfcc = pp.normalize_mfcc(mfcc)
         inputlist.append(np.concatenate((fb, mfcc), axis=1))
 
-    with open(datadir + 'test_data.pkl', 'wb') as test_data:
+    with open('./test_data.pkl', 'wb') as test_data:
         pickle.dump(inputlist, test_data)
 
-    with open(datadir + 'test_name.pkl', 'wb') as test_name:
+    with open('./test_name.pkl', 'wb') as test_name:
         pickle.dump(inputnamefbank, test_name)
 
 def convert_data(DataPath, labeldict):
@@ -98,7 +98,7 @@ def convert_data(DataPath, labeldict):
 
     convert_label_to_int(DataPath, '/48phone_char.map', label)
 
-    with open(DataPath + '/train_data.pkl', 'wb') as train_data:
+    with open('./train_data.pkl', 'wb') as train_data:
         pickle.dump(inputlist, train_data)
 
 
@@ -120,7 +120,7 @@ def convert_all_data(mfccPath, fbankPath, labeldict, datadir):
     for name in inputnamemfcc:
         label.append(labeldict[name])
 
-    with open(datadir + 'train_data.pkl', 'wb') as train_data:
+    with open('./train_data.pkl', 'wb') as train_data:
         pickle.dump(inputlist, train_data)
 
     convert_label_to_int(datadir, datadir + '48phone_char.map', label)
