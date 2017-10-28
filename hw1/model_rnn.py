@@ -192,9 +192,7 @@ def train_rnn(data_folder, model_file = None):
     y = RNN(x)
     print("Loading training pickles..")   
 
-    train_set, eval_set = import_data.load_dataset(data_folder + '/train_data.pkl', 
-                                         data_folder + '/train_label.pkl',
-                                         batch_size=train_batch_size)
+    train_set, eval_set = import_data.load_dataset('./train_data.pkl', './train_label.pkl', batch_size=train_batch_size)
     print("Loading done")
     
     global sess
@@ -257,13 +255,13 @@ def evaluate_rnn_model_from_file(data_folder, model_file):
         
 def evaluate_rnn(data_folder, y):
 
-    phone_list = map_reader.phone_list('./data/48phone_char.map')
-    phone_char_map = map_reader.phone_char_reader('./data/48phone_char.map')
-    phone_map = map_reader.phone_map_reader('./data/phones/48_39.map')
+    phone_list = map_reader.phone_list(data_folder + '48phone_char.map')
+    phone_char_map = map_reader.phone_char_reader(data_folder +'48phone_char.map')
+    phone_map = map_reader.phone_map_reader(data_folder +'phones/48_39.map')
     print("Loaded phone mapping")
     
     r = tf.argmax(y,2)
-    test_set = import_data.load_test_dataset(data_folder + '/test_data.pkl', data_folder + '/test_name.pkl', batch_size=1)
+    test_set = import_data.load_test_dataset('./test_data.pkl', './test_name.pkl', batch_size=1)
 
     end_of_test = False
 
