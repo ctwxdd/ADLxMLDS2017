@@ -138,7 +138,7 @@ def convert_label_to_int(DataPath, path_to_phone_char_map, label):
             input.append(mapping[l])
         labellist.append(input)
         
-    with open('/train_label.pkl', 'wb') as train_label:
+    with open('./train_label.pkl', 'wb') as train_label:
         pickle.dump( labellist, train_label) 
 
 
