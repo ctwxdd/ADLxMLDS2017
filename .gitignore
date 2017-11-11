@@ -109,10 +109,12 @@ ENV/
 
 
 #output file
-/HW1/out*
-/HW1/tmp*
+/hw1/out*
+/hw1/tmp*
 #model file
-/HW1/output/*
+/hw1/output/*
+/hw2/MLDS_hw2_data
+/hw2/models_rgb
+/hw2/Utils/*.csv
 
-
-HW1/data/test_data.npy
+hw1/data/test_data.npy
