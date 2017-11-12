@@ -378,7 +378,7 @@ def train(model_path = None):
 
 def test(model_path='./models/model-100'):
    
-    test_videos = os.listdir(video_test_feat_path)
+    #test_videos = os.listdir(video_test_feat_path)
 
     ixtoword = pd.Series(np.load('./Utils/ixtoword.npy').tolist())
 
@@ -402,9 +402,11 @@ def test(model_path='./models/model-100'):
     saver.restore(sess, model_path)
     test_output_txt_fd = open(outfile, 'w')
 
+    test_videos = ['klteYv1Uv9A_27_33.avi', '5YJaS2Eswg0_22_26.avi', 'UbmZAe5u5FI_132_141.avi', 'JntMAcTlOF0_50_70.avi', 'tJHUH9tpqPg_113_118.avi']
+
     for idx, video_feat_path in enumerate(test_videos):
         
-        video_feat = np.load(os.path.join(video_test_feat_path,video_feat_path))[None,...]
+        video_feat = np.load(os.path.join(video_test_feat_path,video_feat_path+ '.npy'))[None,...]
 
         generated_word_index = sess.run(caption_tf, feed_dict={video_tf:video_feat})
         generated_words = ixtoword[generated_word_index]
