@@ -442,7 +442,7 @@ def test(model_path='./models/model-100'):
         generated_sentence = ' '.join(generated_words)
         generated_sentence = generated_sentence.replace('<bos> ', '')
         generated_sentence = generated_sentence.replace(' <eos>', '')
-        video_name = video_feat_path.split('\\')[-1][:-4]
+        video_name = video_feat_path.split('/')[-1][:-4]
         #print(generated_sentence)
         #print(idx, video_name)
         
