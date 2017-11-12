@@ -115,6 +115,5 @@ ENV/
 /hw1/output/*
 /hw2/MLDS_hw2_data
 /hw2/models_rgb
-/hw2/Utils/*.csv
 
 hw1/data/test_data.npy
