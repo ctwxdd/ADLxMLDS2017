@@ -116,6 +116,5 @@ ENV/
 /hw2/MLDS_hw2_data
 /hw2/models_rgb
 /hw2/unused/*
-/hw2/model_s2s/*
 hw1/data/test_data.npy
 /*.csv
