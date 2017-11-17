@@ -19,7 +19,7 @@ class Video_Caption_Generator():
         self.n_video_lstm_step=n_video_lstm_step
         self.n_caption_lstm_step=n_caption_lstm_step
 
-        with tf.device("/gpu:0"):
+        with tf.device("/cpu:0"):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
 
         self.lstm1 = tf.nn.rnn_cell.BasicLSTMCell(dim_hidden, state_is_tuple=False)
@@ -71,7 +71,7 @@ class Video_Caption_Generator():
 
         for i in range(0, self.n_caption_lstm_step):
 
-            with tf.device("/gpu:0"):
+            with tf.device("/cpu:0"):
                 current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:, i])
 
             tf.get_variable_scope().reuse_variables()
@@ -128,7 +128,7 @@ class Video_Caption_Generator():
             tf.get_variable_scope().reuse_variables()
 
             if i == 0:
-                with tf.device('/gpu:0'):
+                with tf.device('/cpu:0'):
                     current_embed = tf.nn.embedding_lookup(self.Wemb, tf.ones([1], dtype=tf.int64))
 
             with tf.variable_scope("LSTM1"):
@@ -143,7 +143,7 @@ class Video_Caption_Generator():
             generated_words.append(max_prob_index)
             probs.append(logit_words)
 
-            with tf.device("/gpu:0"):
+            with tf.device("/cpu:0"):
                 current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
                 current_embed = tf.expand_dims(current_embed, 0)
 
@@ -263,7 +263,7 @@ def train(model_path = None):
     captions = list(map(lambda x: x.replace('\\', ''), captions))
     captions = list(map(lambda x: x.replace('/', ''), captions))
 
-    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=0)
+    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions)
     
     np.save("./Utils/wordtoix", wordtoix)
     np.save('./Utils/ixtoword', ixtoword)
@@ -284,7 +284,7 @@ def train(model_path = None):
         tf_loss, tf_video, tf_caption, tf_caption_mask, tf_probs = model.build_model()
         sess = tf.InteractiveSession()
 
-        saver = tf.train.Saver(write_version=1)
+        saver = tf.train.Saver()
     
     train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
     
@@ -316,11 +316,9 @@ def train(model_path = None):
             current_feats = np.zeros((batch_size, n_video_lstm_step, dim_image))
             current_feats_vals = list(map(lambda vid: np.load(vid), current_videos))
 
-            current_video_masks = np.zeros((batch_size, n_video_lstm_step))
 
             for ind,feat in enumerate(current_feats_vals):
                 current_feats[ind][:len(current_feats_vals[ind])] = feat
-                current_video_masks[ind][:len(current_feats_vals[ind])] = 1
 
             current_captions = current_batch['Description'].values
             current_captions = list(map(lambda x: '<bos> ' + x, current_captions))
@@ -365,7 +363,6 @@ def train(model_path = None):
                     [train_op, tf_loss],
                     feed_dict={
                         tf_video: current_feats,
-                        tf_video_mask : current_video_masks,
                         tf_caption: current_caption_matrix,
                         tf_caption_mask: current_caption_masks
                         })
@@ -378,7 +375,7 @@ def train(model_path = None):
 
 def test(model_path='./models/model-100'):
    
-    #test_videos = os.listdir(video_test_feat_path)
+    test_videos = os.listdir(video_test_feat_path)
 
     ixtoword = pd.Series(np.load('./Utils/ixtoword.npy').tolist())
 
@@ -402,11 +399,13 @@ def test(model_path='./models/model-100'):
     saver.restore(sess, model_path)
     test_output_txt_fd = open(outfile, 'w')
 
-    test_videos = ['klteYv1Uv9A_27_33.avi', '5YJaS2Eswg0_22_26.avi', 'UbmZAe5u5FI_132_141.avi', 'JntMAcTlOF0_50_70.avi', 'tJHUH9tpqPg_113_118.avi']
-
+  
     for idx, video_feat_path in enumerate(test_videos):
+
+        if '.npy' not in video_feat_path:
+            video_feat_path += '.npy'
         
-        video_feat = np.load(os.path.join(video_test_feat_path,video_feat_path+ '.npy'))[None,...]
+        video_feat = np.load(os.path.join(video_test_feat_path,video_feat_path))[None,...]
 
         generated_word_index = sess.run(caption_tf, feed_dict={video_tf:video_feat})
         generated_words = ixtoword[generated_word_index]
@@ -418,7 +417,7 @@ def test(model_path='./models/model-100'):
         generated_sentence = generated_sentence.replace('<bos> ', '')
         generated_sentence = generated_sentence.replace(' <eos>', '')
         
-        test_output_txt_fd.write("%s,%s\n" % (video_feat_path, generated_sentence))
+        test_output_txt_fd.write("%s,%s\n" % (video_feat_path[:-4], generated_sentence))
 
 
 def main():
@@ -433,6 +432,13 @@ def main():
     ap.add_argument('-d', '--datadir', type=str, help='data dir')
     ap.add_argument('-o', '--output', type=str, help='output filename')
 
+    
+
+    global video_train_feat_path
+    global video_test_feat_path
+    global outfile 
+    global n_epochs
+
     ap.set_defaults(epochs = n_epochs,
                 batch_size = batch_size, 
                 test = False,
@@ -441,9 +447,7 @@ def main():
 
     args = ap.parse_args()
 
-    global video_train_feat_path
-    global video_test_feat_path
-    global outfile 
+    n_epochs = args.epochs
 
     if not args.datadir:
         print("please provide datadir -d")
@@ -451,8 +455,6 @@ def main():
 
     if args.output:
         outfile = args.output
-    
-
 
     video_train_feat_path = os.path.join(args.datadir, 'training_data', 'feat')
     video_test_feat_path = os.path.join(args.datadir, 'testing_data', 'feat')
