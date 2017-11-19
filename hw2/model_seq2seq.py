@@ -32,7 +32,7 @@ epochs = 205
 batch_size = 50
 learning_rate = 0.001
 
-word_threshold = 3
+word_threshold = 2
 
 def build_model(n_words, bias_init_vector=None):
 
