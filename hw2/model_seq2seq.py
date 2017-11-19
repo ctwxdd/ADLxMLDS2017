@@ -416,6 +416,7 @@ def main():
         print("please provide datadir -d")
         exit()
 
+    datadir = args.datadir
     if args.output:
         outfile = args.output
 
