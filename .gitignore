@@ -118,4 +118,5 @@ ENV/
 /hw2/unused/*
 hw1/data/test_data.npy
 /hw2/model_s2s_drop/*
+/hw2/model_s2s_no_atten/*
 /*.csv

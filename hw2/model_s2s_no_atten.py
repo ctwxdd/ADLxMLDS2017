@@ -12,16 +12,13 @@ import argparse
 
 video_train_feat_path = 'training_data/feat'
 video_test_feat_path = 'testing_data/feat'
-video_peer_feat_path = 'peer_review/feat'
 
 video_train_data_path = './Utils/train_label.csv'
 video_test_data_path = './Utils/test_label.csv'
 
-model_save_dir= './model_s2s'
+model_save_dir= './model_s2s_no_atten'
 outfile = './result.csv'
-peerOutfile = './peerOut.csv'
 datadir = 'MLDS_hw2_data'
-
 
 dim_image = 4096
 dim_hidden = 256
@@ -49,14 +46,14 @@ def build_model(n_words, bias_init_vector=None):
     encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell, video_feat, dtype=tf.float32, time_major=False)
 
     # attention
-    attention_mechanism = tf.contrib.seq2seq.LuongAttention( dim_hidden, encoder_outputs)
+    #attention_mechanism = tf.contrib.seq2seq.LuongAttention( dim_hidden, encoder_outputs)
 
     with tf.variable_scope('embedding'):
         embedding_decoder = tf.Variable(tf.truncated_normal(shape=[ n_words,  dim_hidden], stddev=0.1), name='embedding_decoder')
         decoder_emb_inp = tf.nn.embedding_lookup(embedding_decoder, caption[:,:-1])
 
     decoder_cell = tf.nn.rnn_cell.BasicLSTMCell( dim_hidden)
-    decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism, attention_layer_size= dim_hidden)
+    #decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism, attention_layer_size= dim_hidden)
 
     decoder_seq_length = [ caption_lstm_step+1] *  batch_size
     # time scheduling
@@ -64,7 +61,7 @@ def build_model(n_words, bias_init_vector=None):
     #helper = tf.contrib.seq2seq.TrainingHelper(decoder_emb_inp, decoder_seq_length, time_major=False)
     projection_layer = Dense( n_words, use_bias=False )
     decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, helper, 
-    decoder_cell.zero_state( batch_size, tf.float32).clone(cell_state=encoder_state), output_layer = projection_layer)
+    encoder_state, output_layer = projection_layer)
 
     # Dynamic decoding
     outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
@@ -86,20 +83,19 @@ def build_generator(n_words, bias_init_vector=None):
     encoder_cell = tf.nn.rnn_cell.BasicLSTMCell( dim_hidden) # b t h
     encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell, video_feat, dtype=tf.float32, time_major=False)
     # attention
-    attention_mechanism = tf.contrib.seq2seq.LuongAttention( dim_hidden, encoder_outputs)
+    #attention_mechanism = tf.contrib.seq2seq.LuongAttention( dim_hidden, encoder_outputs)
 
     with tf.variable_scope('embedding'):
         embedding_decoder = tf.Variable(tf.truncated_normal(shape=[ n_words,  dim_hidden], stddev=0.1), name='embedding_decoder')
 
     decoder_cell = tf.nn.rnn_cell.BasicLSTMCell( dim_hidden)
-    decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism, attention_layer_size= dim_hidden)
+    #decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism, attention_layer_size= dim_hidden)
 
     # time scheduling
     helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(embedding_decoder, tf.fill([batch_size], 1), 2)
 
     projection_layer = Dense( n_words, use_bias=False )
-    decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, helper, 
-        decoder_cell.zero_state( batch_size, tf.float32).clone(cell_state=encoder_state), output_layer = projection_layer)
+    decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, helper, encoder_state, output_layer = projection_layer)
 
     # Dynamic decoding
     outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder,  maximum_iterations=caption_lstm_step)
@@ -190,9 +186,9 @@ def train(model_path):
         train_data.append(tmp_data)
     train_data = np.array(train_data)
 
-    np.save("./Utils/wordtoix", wordtoix)
-    np.save('./Utils/ixtoword', ixtoword)
-    np.save("./Utils/bias_init_vector", bias_init_vector)
+    np.save("./Utils/no_atten_wordtoix", wordtoix)
+    np.save('./Utils/no_atten_ixtoword', ixtoword)
+    np.save("./Utils/no_atten_bias_init_vector", bias_init_vector)
 
     train_loss, tf_video, tf_caption, tf_caption_mask, tf_probs, do_prob = build_model(len(wordtoix), bias_init_vector=bias_init_vector)
 
@@ -290,13 +286,28 @@ def train(model_path):
                 })
 
             print('idx: ', start, " Epoch: ", epoch, " loss: ", loss_val, ' Elapsed time: ', str((time.time() - start_time)))
+            
+        # loss_val, translate = sess.run([train_loss, tf_probs], feed_dict={
+        #         tf_video: current_feats,
+        #         tf_caption: current_caption_matrix_src,
+        #         tf_caption_mask: current_caption_masks
+        #         })       
         
+        # generated_word_index = translate[0]
+        # generated_words = []
+
+        # for word_idx in generated_word_index:
+        #     generated_words.append(ixtoword[word_idx])
+
+
+        # print(generated_words)
+        # print(current_captions)
         
         if np.mod(epoch, 10) == 0:
             print("Epoch ", epoch, " is done. Saving the model ...")
             saver.save(sess, os.path.join(model_save_dir, 'model'), global_step=epoch)
 
-def test(model_path='./models/model-200', peer=None):
+def test(model_path='./models/model-200'):
 
     test_videos = []
     
@@ -304,10 +315,11 @@ def test(model_path='./models/model-200', peer=None):
         for line in f:
             test_videos.append(line.strip())
 
-    ixtoword = pd.Series(np.load('./Utils/ixtoword.npy').tolist())
-    bias_init_vector = np.load('./Utils/bias_init_vector.npy')
+    ixtoword = pd.Series(np.load('./Utils/no_atten_ixtoword.npy').tolist())
+    bias_init_vector = np.load('./Utils/no_atten_bias_init_vector.npy')
 
     video, words = build_generator(len(ixtoword))
+    print(len(ixtoword))
     
     sess = tf.InteractiveSession()
 
@@ -336,43 +348,10 @@ def test(model_path='./models/model-200', peer=None):
         generated_sentence = generated_sentence.replace(' <eos>', '')
         video_name = video_feat_path
         
-        # print(generated_sentence)
-        # print(idx, video_name)
+        print(generated_sentence)
+        print(idx, video_name)
 
         test_output_txt_fd.write("%s,%s\n" % (video_name, generated_sentence))
-
-    if peer:
-        test_videos = []
-        with open(os.path.join(datadir, 'peer_review_id.txt')) as f:
-            
-            for line in f:
-                test_videos.append(line.strip())
-
-            test_output_txt_fd = open(peerOutfile, 'w')
-
-            for idx, video_feat_path in enumerate(test_videos):
-
-                video_feat = np.load(os.path.join(video_peer_feat_path, video_feat_path + '.npy'))[None,...]
-
-                feed_dict={
-                    video: video_feat
-                }
-
-                probs_val = sess.run(words, feed_dict=feed_dict)
-
-                generated_words = ixtoword[list(probs_val[0])]
-
-                punctuation = np.argmax(np.array(generated_words) == '<eos>') + 1
-                generated_words = generated_words[:punctuation]
-
-                generated_sentence = ' '.join(generated_words)
-                generated_sentence = generated_sentence.replace('<bos> ', '')
-                generated_sentence = generated_sentence.replace(' <eos>', '')
-                video_name = video_feat_path
-            
-                test_output_txt_fd.write("%s,%s\n" % (video_name, generated_sentence))
-
-
 
 def main():
 
@@ -385,13 +364,10 @@ def main():
     ap.add_argument('-d', '--datadir', type=str, help='data dir')
     ap.add_argument('-o', '--output', type=str, help='output filename')
     ap.add_argument('-s', '--savedir', type=str, help='model save dir')
-    ap.add_argument('-op', '--peerOutput', type=str, help='peer output file')
 
     global video_train_feat_path
     global video_test_feat_path
-    global video_peer_feat_path
     global outfile 
-    global peerOutfile
     global epochs
 
     ap.set_defaults(epochs = epochs,
@@ -399,8 +375,7 @@ def main():
                 test = False,
                 size_hidden = dim_hidden,
                 model = None,
-                savedir = model_save_dir,
-                peerOutput = None)
+                savedir = model_save_dir)
 
     args = ap.parse_args()
 
@@ -418,16 +393,12 @@ def main():
     if args.output:
         outfile = args.output
 
-    if args.peerOutput:
-        peerOutfile = args.peerOutput
-
     video_train_feat_path = os.path.join(args.datadir, 'training_data', 'feat')
     video_test_feat_path = os.path.join(args.datadir, 'testing_data', 'feat')
-    video_peer_feat_path = os.path.join(args.datadir, 'peer_review', 'feat')
 
     if args.test:
         assert args.model, "Model file is required for evaluation."
-        test(model_path=args.model, peer = args.peerOutput)
+        test(model_path=args.model)
     else:
         train(model_path=args.model)
     
