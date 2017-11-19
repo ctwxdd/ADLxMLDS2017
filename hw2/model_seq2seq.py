@@ -393,6 +393,7 @@ def main():
     global outfile 
     global peerOutfile
     global epochs
+    global datadir
 
     ap.set_defaults(epochs = epochs,
                 batch_size = batch_size, 
