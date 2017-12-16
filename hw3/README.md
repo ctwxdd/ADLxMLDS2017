@@ -1,3 +1,11 @@
+agent_dir/agent_dqn.py -- dqn
+agent_dir/agent_ddqn.py -- double dqn
+agent_dir/agent_dqn_dueling.py -- double dqn + dueling
+agent_dir/agent_pg_ori.py -- dense network
+agent_dir/agent_pg --a3c agent
+
+
+
 # ADL HW3
 Please don't revise test.py, environment.py, agent_dir/agent.py
 
