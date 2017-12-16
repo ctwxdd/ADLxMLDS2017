@@ -35,7 +35,7 @@ class Agent_DQN(Agent):
         For example: building your model
         """
         super(Agent_DQN,self).__init__(env)
-
+        tf.reset_default_graph() 
         self.num_action = 3
         self.minibatch = 32
         self.esp = 1
