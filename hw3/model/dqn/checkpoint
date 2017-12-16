@@ -1,0 +1,2 @@
+model_checkpoint_path: "Breakout.ckpt-0"
+all_model_checkpoint_paths: "Breakout.ckpt-0"
