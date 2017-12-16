@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np 
 
+random.seed(87)
+
 
 FINAL_EXPLORATION = 0.05
 TARGET_UPDATE = 1000
@@ -37,7 +39,7 @@ class Agent_DQN(Agent):
         self.num_action = 3
         self.minibatch = 32
         self.esp = 1
-        self.model_path = "./model/save/70/Breakout_ddqn.ckpt-0"
+        self.model_path = "./model/dqn/Breakout_ddqn.ckpt-0"
         self.replay_memory = deque()
 
         
@@ -85,7 +87,6 @@ class Agent_DQN(Agent):
         error = tf.abs(self.q_target - self.q_value)
 
         diff = clipped_error(error)
-        #linear_part = error - quadratic_part
 
         self.loss = tf.reduce_mean(tf.reduce_sum(diff))
 
@@ -99,7 +100,7 @@ class Agent_DQN(Agent):
 
         if args.test_dqn:
             #you can load your model here
-            self.saver.restore(self.sess, save_path = './model/save/60/Breakout.ckpt-0')
+            self.saver.restore(self.sess, save_path = self.model_path)
             print('loading trained model')
 
     def build_model(self, input1, f1, f2, f3, w1, w2):
@@ -110,8 +111,6 @@ class Agent_DQN(Agent):
 
         l1 = tf.reshape(c3, [-1, w1.get_shape().as_list()[0]])
 
-
-        #l2 = tf.nn.relu(tf.matmul(l1, w1))
         l2 = lrelu(tf.matmul(l1, w1))
         pyx = tf.matmul(l2, w2)
 
@@ -275,7 +274,7 @@ class Agent_DQN(Agent):
         state = np.reshape(observation, (1, 84, 84, 4))
         Q = self.sess.run(self.py_x, feed_dict = {self.input : state})
 
-        self.esp = 0
+        self.esp = 0.01
 
         if self.esp > np.random.rand(1):
 

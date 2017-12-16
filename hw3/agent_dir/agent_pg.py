@@ -6,6 +6,9 @@ import scipy
 import threading
 import os
 import gym
+import random
+
+random.seed(87)
 
 def copy_src_to_dst(from_scope, to_scope):
 
@@ -281,7 +284,7 @@ class Agent_PG(Agent):
         self.sess = tf.InteractiveSession()
         self.coord = tf.train.Coordinator()
 
-        self.save_path = "model/checkpoint-11/model.ckpt"
+        self.save_path = "model/pg/model.ckpt"
         self.n_threads = 8
         self.input_shape = [80, 80, 1]
         self.output_dim = 3  # {1, 2, 3}
