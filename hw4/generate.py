@@ -68,21 +68,23 @@ if __name__ == '__main__':
 
     test = load_test(TEST_PATH, hair_map, eye_map)
     
-    # r0 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[0]
+    #r0 = pickle.load(open(os.path.join('.', "./ckpt/z_dump3.dat"), 'rb'))[12]
     # r1 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[1]
-    # r2 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[2]
+    # r2 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[4]
     # r3 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[3]
     # r4 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[4]
-    # z_noise = pickle.load(open(os.path.join('.', "z_noise_bb.dat"), 'rb'))
-    # z_noise = z_sampler.rvs([test_size, 100])
+    #z_noise = pickle.load(open(os.path.join('.', "z_noise_bb.dat"), 'rb'))
+    #z_noise = z_sampler.rvs([test_size, 100])
     # z_noise[0] = r0
     # z_noise[1] = r1
     # z_noise[2] = r2
-    # z_noise[3] = r3
-    # z_noise[4] = r4
-    #pickle.dump(z_noise, open(os.path.join('.', "z_dump.dat"), 'wb'))
+    # # z_noise[3] = r3
+    # # z_noise[4] = r4
+    # pickle.dump(z_noise, open(os.path.join('.', "z_dump.dat"), 'wb'))
 
-    z_noise = pickle.load(open(os.path.join('.', "./ckpt/z_dump.dat"), 'rb'))
+    z_noise = pickle.load(open(os.path.join('.', "./ckpt/z_dump1.dat"), 'rb'))
+    #z_noise[4] = r0
+    #pickle.dump(z_noise, open(os.path.join('.', "./ckpt/z_dump4.dat"), 'wb'))
 
     for idx, t in enumerate(test):
         
