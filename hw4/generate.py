@@ -1,35 +1,22 @@
 import pickle 
 import os 
-from util import Data
-import util
+from libs.util import *
 import tensorflow as tf
 import numpy as np
 import sys
 import os
 import scipy.stats as stats
 from scipy import misc
-
-#from Improved_ import WGAN
-
-from model import Generator
-
-# os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-# os.environ["CUDA_VISIBLE_DEVICES"]="0"
+import random
+from  network.model_srresnet import Generator_srresnet
+import argparse
 
 tf.flags.DEFINE_integer("z_dim", 100, "noise dimension")
-tf.flags.DEFINE_string("img_dir", "./early/", "test image directory")
+tf.flags.DEFINE_string("img_dir", "./samples/", "test image directory")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
-
-hair_color = ['unk', 'orange hair', 'white hair', 'aqua hair', 'gray hair',
-    'green hair', 'red hair', 'purple hair', 'pink hair',
-    'blue hair', 'black hair', 'brown hair', 'blonde hair']
-
-eye_color = ['unk','gray eyes', 'black eyes', 'orange eyes',
-    'pink eyes', 'yellow eyes', 'aqua eyes', 'purple eyes',
-    'green eyes', 'brown eyes', 'red eyes', 'blue eyes']
-
+test_size = 5
 hair_map = {}
 eye_map = {}
 
@@ -39,92 +26,69 @@ for idx, h in enumerate(hair_color):
 for idx, e in enumerate(eye_color):
     eye_map[e] = idx
 
-TEST_PATH = '../../data/sample_testing_text.txt'
-
-def make_one_hot( hair, eye):
-
-    eyes_hot = np.zeros([len(eye_color)])
-    eyes_hot[eye] = 1
-    hair_hot = np.zeros([len(hair_color)])
-    hair_hot[hair] = 1
-    tag_vec = np.concatenate((eyes_hot, hair_hot))
-
-    return tag_vec
+TEST_PATH = './testing_text.txt'
+MODEL_PATH = './ckpt/model-350500'
 
 
-def load_test(test_path, hair_map, eye_map):
 
-    test = []
-
-    with open(test_path, 'r') as f:
-
-        for line in f.readlines():
-            hair = 0
-            eye = 0
-            if line == '\n':
-                break
-            line = line.strip().split(',')[1]
-            p = line.split(' ')
-            p1 = ' '.join(p[:2]).strip()
-            p2 = ' '.join(p[-2:]).strip()
-        
-            if p1 in hair_map:
-                hair = hair_map[p1]
-            elif p2 in hair_map:
-                hair = hair_map[p2]
-            
-            if p1 in eye_map:
-                eye = eye_map[p1]
-            elif p2 in eye_map:
-                eye = eye_map[p2]
-
-            test.append(make_one_hot(hair, eye))
-    
-    return test
-
-
-def dump_img(img_dir, img_feats, test):
-
-    if not os.path.exists(img_dir):
-        os.makedirs(img_dir)
-
-    img_feats = (img_feats + 1.)/2 * 255.
-    img_feats = np.array(img_feats, dtype=np.uint8)
-
-    for idx, img_feat in enumerate(img_feats):
-        path = os.path.join(img_dir, 'sample_{}_{}.jpg'.format(test, idx+1))
-        misc.imsave(path, img_feat)
-
+ #saver.restore(sess, save_path='./models/Dec-29-2017-15-45-11/checkpoints/backup/model-27000')
 
 
 if __name__ == '__main__':
 
+    ap = argparse.ArgumentParser(description= 'Generate anime image')
+
+    ap.add_argument('-t', '--test_file', type=str, help='Path to the test file')
+    ap.add_argument('-m', '--model', type=str, help='.ckpt file of the model. If -t option is used, evaluate this model. Otherwise, train it.')
+
+    ap.set_defaults(test_file = TEST_PATH,
+                    model = MODEL_PATH)
+
+    args = ap.parse_args()
+
+    TEST_PATH = args.test_file
+    MODEL_PATH = args.model
+
     seq = tf.placeholder(tf.float32, [None, len(hair_color)+len(eye_color)], name="seq")      
     z = tf.placeholder(tf.float32, [None, FLAGS.z_dim])
 
-    g_net = Generator(  embedding_size=100, 
+    g_net = Generator_srresnet(  embedding_size=100, 
                         hidden_size=100,
-                        img_row=64,
-                        img_col=64)
+                        img_row=96,
+                        img_col=96, train = False)
 
     result = g_net(seq, z)
 
-
     sess = tf.Session()
     saver = tf.train.Saver(max_to_keep=None)
-    saver.restore(sess, save_path='./ckpt/model-128000')
+
+    saver.restore(sess, save_path=MODEL_PATH)
 
     z_sampler = stats.truncnorm((-1 - 0.) / 1., (1 - 0.) / 1., loc=0., scale=1)
 
     test = load_test(TEST_PATH, hair_map, eye_map)
     
-    
-    
+    # r0 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[0]
+    # r1 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[1]
+    # r2 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[2]
+    # r3 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[3]
+    # r4 = pickle.load(open(os.path.join('.', "z_dump.dat"), 'rb'))[4]
+    # z_noise = pickle.load(open(os.path.join('.', "z_noise_bb.dat"), 'rb'))
+    # z_noise = z_sampler.rvs([test_size, 100])
+    # z_noise[0] = r0
+    # z_noise[1] = r1
+    # z_noise[2] = r2
+    # z_noise[3] = r3
+    # z_noise[4] = r4
+    #pickle.dump(z_noise, open(os.path.join('.', "z_dump.dat"), 'wb'))
+
+    z_noise = pickle.load(open(os.path.join('.', "./ckpt/z_dump.dat"), 'rb'))
+
     for idx, t in enumerate(test):
-        z_noise = z_sampler.rvs([5, FLAGS.z_dim])
+        
 
         t = np.expand_dims(t, axis=0)
-        cond = np.repeat(t, 5, axis=0)
+        cond = np.repeat(t, test_size, axis=0)
         feed_dict = {seq: cond,  z:z_noise}
 
         sampler = tf.identity(g_net(seq, z, reuse=True, train=False), name='sampler')

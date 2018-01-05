@@ -125,3 +125,7 @@ hw1/data/test_data.npy
 /hw4/test_img
 /hw4/prepro
 /hw4/logs
+/hw4/ckpt/unused
+hw4/ckpt/model-350500.data-00000-of-00001
+hw4/ckpt/model-350500.index
+hw4/ckpt/model-350500.meta
