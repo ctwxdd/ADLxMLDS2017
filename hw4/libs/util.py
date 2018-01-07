@@ -242,7 +242,7 @@ def dump_img(img_dir, img_feats, iters, img_size = 64):
     img_feats = np.array(img_feats, dtype=np.uint8)
 
     for idx, img_feat in enumerate(img_feats):
-        path = os.path.join(img_dir, 'iters_{}_test_{}.jpg'.format(iters, idx))
+        path = os.path.join(img_dir, 'sample_{}_{}.jpg'.format(iters, idx+1))
         img_feat =  misc.imresize(img_feat, [img_size, img_size, 3])
         misc.imsave(path, img_feat)
 
